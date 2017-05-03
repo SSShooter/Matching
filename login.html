@@ -9,28 +9,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="https://unpkg.com/purecss@0.6.2/build/pure-min.css" integrity="sha384-UQiGfs9ICog+LwheBSRCt1o5cbyKIHbwjWscjemyBMT9YCUMZffs6UqUTd0hObXD"
     crossorigin="anonymous">
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
   <style>
-    .pure-form{
-      margin: auto;
+    .pure-form {
+      box-sizing: border-box;
+      padding: 15px;
+    }
+
+    header {
+      text-align: center;
+      color: #333;
+      font-size: 1.5em;
+      padding: 15px;
     }
   </style>
 </head>
 
 <body>
-  <form class="pure-form">
+  <header>
+    玩家登陆
+  </header>
+  <form class="pure-form" onSubmit="return false;">
     <fieldset class="pure-group">
-      <input type="text" class="pure-input-1-2" placeholder="Username">
-      <input type="text" class="pure-input-1-2" placeholder="Password">
-      <input type="email" class="pure-input-1-2" placeholder="Email">
+      <input id="name" type="text" class="pure-input-1" placeholder="Username">
+      <input id="pw" type="password" class="pure-input-1" placeholder="Password">
     </fieldset>
-
-    <fieldset class="pure-group">
-      <input type="text" class="pure-input-1-2" placeholder="A title">
-      <textarea class="pure-input-1-2" placeholder="Textareas work too"></textarea>
-    </fieldset>
-
-    <button type="submit" class="pure-button pure-input-1-2 pure-button-primary">Sign in</button>
+    <button class="pure-button pure-input-1 pure-button-primary" onclick="login()">log in</button>
   </form>
 </body>
+<script>
+  function login() {
+    var name = document.querySelector('#name').value;
+    var pw = document.querySelector('#pw').value;
+    axios.post('/login', {
+        name: name,
+        password: pw
+      })
+      .then(function (response) {
+        console.log(response);
+      });
+  }
+</script>
 
 </html>

@@ -4,13 +4,23 @@ var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var port = process.env.PORT || 2030;
 var bs = require('binarysearch');
-var Player = require('./player.js');
+var bodyParser = require('body-parser');
+// var Player = require('./player.js');
 
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 app.get('/', function (req, res) {
   res.sendFile(__dirname + '/index.html');
 });
-app.get('/login', function (req, res) {
+app.get('/loginpage', function (req, res) {
   res.sendFile(__dirname + '/login.html');
+});
+app.post('/login', function (req, res) {
+  console.log(req.body.name);
+  // Player.comparePassword(req.body.pw,function(a){
+  //   console.log(a);
+  // });
+  res.send('welcome');
 });
 
 var que = [];
@@ -83,16 +93,16 @@ http.listen(port, function () {
   console.log('listening on *:' + port);
 });
 
-var ssshooter = new Player({
-  name: 'ssshooter',
-  password: '6262991210'
-});
+// var ssshooter = new Player({
+//   name: 'ssshooter',
+//   password: '6262991210'
+// });
 
-ssshooter.save(function (err) {
-  if (err) console.log('err');
-  else console.log('save');
-});
+// ssshooter.save(function (err) {
+//   if (err) console.log('err');
+//   else console.log('save');
+// });
 
-Player.findById('5909414056dd933e36d79394',function(err,data){
-  console.log(data);
-})
+// Player.findById('5909414056dd933e36d79394',function(err,data){
+//   console.log(data);
+// })
