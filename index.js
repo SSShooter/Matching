@@ -2,8 +2,9 @@ var _ = require('underscore');
 var app = require('express')();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
-var port = process.env.PORT || 3000;
+var port = process.env.PORT || 2030;
 var bs = require('binarysearch');
+var Player = require('./player.js');
 
 app.get('/', function (req, res) {
   res.sendFile(__dirname + '/index.html');
@@ -57,21 +58,38 @@ io.on('connection', function (socket) {
 function ScoreCalc(player1_score, player2_score, winner) {
   let Ea = 1 / (1 + Math.pow(10, (player2_score - player1_score) / 400));
   let Eb = 1 - Ea;
-  let player1_new_score,player2_new_score,change;
+  let player1_new_score, player2_new_score, change;
   if (winner == 1) {
     change = Math.round(200 * (1 - Ea));
     player1_new_score = player1_score + change;
     player2_new_score = player2_score - change;
-  }else{
+  } else {
     change = Math.round(200 * (1 - Eb));
     player1_new_score = player1_score - change;
     player2_new_score = player2_score + change;
   }
-  if(player1_new_score<0)player1_new_score=0;
-  if(player2_new_score<0)player2_new_score=0;
-  return {player1_new_score:player1_new_score,player2_new_score:player2_new_score};
+  if (player1_new_score < 0) player1_new_score = 0;
+  if (player2_new_score < 0) player2_new_score = 0;
+  return {
+    player1_new_score: player1_new_score,
+    player2_new_score: player2_new_score
+  };
 }
 
 http.listen(port, function () {
   console.log('listening on *:' + port);
 });
+
+var ssshooter = new Player({
+  name: 'ssshooter',
+  password: '6262991210'
+});
+
+ssshooter.save(function (err) {
+  if (err) console.log('err');
+  else console.log('save');
+});
+
+Player.findById('5909414056dd933e36d79394',function(err,data){
+  console.log(data);
+})
