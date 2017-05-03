@@ -9,6 +9,9 @@ var Player = require('./player.js');
 app.get('/', function (req, res) {
   res.sendFile(__dirname + '/index.html');
 });
+app.get('/login', function (req, res) {
+  res.sendFile(__dirname + '/login.html');
+});
 
 var que = [];
 var score_que = [];
