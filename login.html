@@ -1,28 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>玩家登陆</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="https://unpkg.com/purecss@0.6.2/build/pure-min.css" integrity="sha384-UQiGfs9ICog+LwheBSRCt1o5cbyKIHbwjWscjemyBMT9YCUMZffs6UqUTd0hObXD"
     crossorigin="anonymous">
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-  <style>
-    .pure-form {
-      box-sizing: border-box;
-      padding: 15px;
-    }
-
-    header {
-      text-align: center;
-      color: #333;
-      font-size: 1.5em;
-      padding: 15px;
-    }
-  </style>
+  <link rel="stylesheet" href="css/common.css">
 </head>
 
 <body>
@@ -34,7 +19,8 @@
       <input id="name" type="text" class="pure-input-1" placeholder="Username">
       <input id="pw" type="password" class="pure-input-1" placeholder="Password">
     </fieldset>
-    <button class="pure-button pure-input-1 pure-button-primary" onclick="login()">log in</button>
+    <button class="pure-button pure-input-1" onclick="login()">登陆</button>
+    <button class="pure-button pure-input-1" onclick="window.location.href = 'http://' + location.host + '/register'">注册</button>
   </form>
 </body>
 <script>
@@ -45,8 +31,12 @@
         name: name,
         password: pw
       })
-      .then(function (response) {
-        console.log(response);
+      .then(function (res) {
+        if (res.data.code) {
+          alert(res.data.msg);
+        } else {
+          window.location.href = 'http://' + location.host + '/homepage';
+        }
       });
   }
 </script>

@@ -3,8 +3,7 @@ mongoose.connect('mongodb://localhost/test');
 //用于md5加密
 var bcrypt = require('bcryptjs')
 //加盐数
-var SALT_WORK_FACTOR = 10
-var db = mongoose.connection;
+var SALT_WORK_FACTOR = 5;
 var playerSchama = mongoose.Schema({
     name: {
         unique: true,
