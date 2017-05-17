@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>玩家注册</title>
+  <link rel="stylesheet" href="https://unpkg.com/purecss@0.6.2/build/pure-min.css" integrity="sha384-UQiGfs9ICog+LwheBSRCt1o5cbyKIHbwjWscjemyBMT9YCUMZffs6UqUTd0hObXD"
+    crossorigin="anonymous">
+  <link rel="stylesheet" href="css/common.css">
+</head>
+
+<body>
+  <header>
+    玩家登陆
+  </header>
+  <form class="pure-form" onSubmit="return false;">
+    <fieldset class="pure-group">
+      <input id="name" type="text" class="pure-input-1" placeholder="Username">
+      <input id="email" type="text" class="pure-input-1" placeholder="email">
+      <input id="pw1" type="password" class="pure-input-1" placeholder="Password">
+      <input id="pw2" type="password" class="pure-input-1" placeholder="Password again">
+    </fieldset>
+    <button class="pure-button pure-input-1" onclick="register()">注册</button>
+  </form>
+</body>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script>
+  function register() {
+    var name = document.querySelector('#name').value;
+    var pw1 = document.querySelector('#pw1').value;
+    var pw2 = document.querySelector('#pw2').value;
+    var email = document.querySelector('#email').value;
+    if (name && pw1 && pw2 && email) {
+      if (pw1 === pw2) {
+        axios.post('/register', {
+            name: name,
+            password: pw1,
+            email: email
+          })
+          .then(function (res) {
+            console.log(res);
+            if (res.data.code) {
+              alert(res.data.msg);
+            } else {
+              window.location.href = 'http://' + location.host + '/login';
+            }
+          });
+      } else {
+        alert('两次密码不一样');
+      }
+    } else {
+      alert('请完整填写注册信息');
+    }
+  }
+</script>
+
+</html>

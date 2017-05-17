@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="https://unpkg.com/purecss@0.6.2/build/pure-min.css" integrity="sha384-UQiGfs9ICog+LwheBSRCt1o5cbyKIHbwjWscjemyBMT9YCUMZffs6UqUTd0hObXD"
     crossorigin="anonymous">
   <link rel="stylesheet" href="./css/common.css">
-  <link rel="stylesheet" href="./css/layer.css">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>主页</title>
   <style>
@@ -160,7 +159,6 @@
     <button class="pure-button pure-input-1" @click="showTheModal" v-bind:class="{ 'pure-button-disabled': submitDisabled }">{{submitState}}</button>
     <button class="pure-button pure-input-1" @click="logout">log out</button>
   </div>
-  <script src="./js/layer.js"></script>
   <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
   <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
   <script src="https://unpkg.com/vue/dist/vue.js"></script>
@@ -182,7 +180,6 @@
       beforeCreate: function () {
         var _this = this;
         var socket = this.socket = io();
-        socket.on('connect', function () {});
         socket.on('match successfully', function (rival) {
           _this.submitState = '提交成绩';
           _this.submitDisabled = false;
@@ -209,9 +206,15 @@
         });
         axios.get('/getinfo')
           .then(function (res) {
+            _this.socket.emit('online', res.data.name);//上线（用于匹配完断线重新获取name信息）
             console.log(res);
             _this.name = res.data.name;
             _this.score = res.data.score;
+            if (res.data.state === 1) {
+              _this.rival = res.data.lastrival;
+              _this.matching = 2;
+              _this.submitDisabled = false;
+            }
           });
       },
       methods: {
