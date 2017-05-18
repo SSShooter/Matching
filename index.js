@@ -15,7 +15,9 @@ var formidable = require('formidable');
 var fs = require('fs');
 var mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
-
+/**
+ * 
+ */
 app.use(express.static('public'));
 
 app.use(bodyParser.json());
@@ -45,6 +47,7 @@ app.use(function (req, res, next) {
 app.get('/', function (req, res) {
   res.sendFile(__dirname + '/homepage.html');
 });
+
 app.get('/getinfo', function (req, res) {
   var query = MatchState.findOne({
     name: req.session.name
@@ -64,10 +67,45 @@ app.get('/myTeam', function (req, res) {
   res.sendFile(__dirname + '/myTeam.html');
 });
 
+app.post('/allow', function (req, res) {
+  Player.findOne({
+    openid: req.body.id
+  }, function (err, doc) {
+    doc.status = 2; //身份改为队员
+    doc.save(function () {
+      res.json({
+        code: 0
+      });
+    });
+  });
+});
+
+app.post('/disallow', function (req, res) {
+  Player.findOne({
+    openid: req.body.id
+  }, function (err, doc) {
+    console.log('disallow');
+    doc.status = req.session.status = 0; //身份改为无所属
+    doc.save(function () {
+      Team.findOne({ //从队员列表移除
+        name: req.session.team
+      }, function (err, team) {
+        team.mate = _.without(team.mate, req.body.id);
+        team.save(function () {
+          res.json({
+            code: 0
+          });
+        });
+      })
+    });
+  });
+});
+
 app.post('/teaminfo', function (req, res) {
   Team.findOne({
     name: req.session.team
   }, function (err, doc) {
+    console.log(req.session.status);
     if (err) {
       res.json({
         code: 1,
@@ -88,18 +126,15 @@ app.post('/teaminfo', function (req, res) {
     var teamname = doc.name;
     var teamdesc = doc.desc;
     Promise.all(matestatePromise).then(function (value) {
-      console.log('ok');
-      console.log(value);
-
       res.json({
         code: 0,
         msg: 'ok',
         teamname: doc.name,
         teamdesc: doc.descript,
-        member: value
+        member: value,
+        mystatus: req.session.status
       });
     }, function (err) {
-      console.log('err');
       console.log(err);
     });
   });
@@ -130,7 +165,7 @@ app.post('/newteam', function (req, res) {
           openid: req.session.openid
         }, function (err, doc) {
           doc.team = req.body.name;
-          doc.status = 1;
+          doc.status = req.session.status = 1;
           doc.save();
         })
         req.session.team = req.body.name;
@@ -198,7 +233,7 @@ app.get('/searchteam', function (req, res) {
 
 app.post('/searchteam', function (req, res) {
   let keyword = req.body.keyword;
-  if(!keyword)return;
+  if (!keyword) return;
   Team.find({
     name: new RegExp(keyword, 'i')
   }, function (err, doc) {
@@ -218,6 +253,66 @@ app.post('/searchteam', function (req, res) {
       }
     }
   });
+});
+
+app.post('/jointeam', function (req, res) {
+  if (!req.session.openid) {
+    res.json({
+      code: 1,
+      msg: '请重新登录'
+    });
+  } else {
+    Player.findOne({
+      openid: req.session.openid
+    }, function (err, doc) {
+      doc.team = req.body.teamname;
+      doc.status = req.session.status = 4;
+      console.log(req.session.status);
+      doc.save(function (err) {
+        Team.findOne({
+          name: req.body.teamname
+        }, function (err, doc) {
+          doc.mate.push(req.session.openid);
+          doc.save(function () {
+            req.session.team = req.body.teamname;
+            res.json({
+              code: 0,
+              msg: 'ok'
+            });
+          });
+        });
+      });
+    });
+  }
+});
+
+app.post('/leftteam', function (req, res) { //不用传入参数，使用session解决问题
+  if (!req.session.openid) {
+    res.json({
+      code: 1,
+      msg: '请重新登录'
+    });
+  } else {
+    Player.findOne({
+      openid: req.session.openid
+    }, function (err, doc) {
+      doc.team = '';
+      doc.status = req.session.status = 0;
+      console.log(req.session.status);
+      doc.save();
+    });
+    Team.findOne({
+      name: req.session.team
+    }, function (err, doc) {
+      doc.mate = _.without(doc.mate, req.session.openid);
+      doc.save();
+    });
+    req.session.team = '';
+    res.json({
+      code: 0,
+      msg: 'ok'
+    });
+  }
 });
 
 app.get('/matchInfo', function (req, res) {

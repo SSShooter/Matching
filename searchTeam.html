@@ -31,7 +31,7 @@
 			<a href="javascript:" class="weui-search-bar__cancel-btn" id="search_cancel">取消</a>
 		</div>
 		<div class="weui-cells weui-cells_access search_show" id="search_show">
-			<div v-for="team in result" class="weui-cell">
+			<div v-for="team in result" class="weui-cell" @click="jointeam" :data-name="team.name">
 				<div class="weui-cell__bd weui-cell_primary">
 					<p>{{team.name}}</p>
 				</div>
@@ -52,7 +52,7 @@
 				weui.searchBar('#search_bar');
 				$('.weui-search-bar__input').bind('input propertychange', function () {
 					_this.result = [];
-					var url = 'http://www.time-record.net/searchteam';
+					var url = '/searchteam';
 					var data = {
 						keyword: this.value
 					}
@@ -61,6 +61,45 @@
 						_this.result = res.doc;
 					});
 				});
+			},
+			methods: {
+				jointeam: function (ev) {
+					var thisTeamName;
+					var ev = ev || window.event;
+					var target = ev.target || ev.srcElement;
+					while (1) { //事件委托运用
+						if (target.className == 'weui-cell') {
+							thisTeamName = target.dataset.name;
+							break
+						}
+						target = target.parentNode;
+					}
+					weui.confirm('是否加入' + thisTeamName + '?', {
+						title: '注意',
+						buttons: [{
+							label: '不加入',
+							type: 'default',
+							onClick: function () {
+								console.log('no')
+							}
+						}, {
+							label: '加入',
+							type: 'primary',
+							onClick: function () {
+								console.log('yes')
+								var loading = weui.loading('loading');
+								$.post('/jointeam', {
+									teamname: thisTeamName
+								}, function (res) {
+									if (res.code == 0) {
+										loading.hide();
+										window.location = '/myteam';
+									}
+								});
+							}
+						}]
+					});
+				}
 			}
 		})
 	</script>

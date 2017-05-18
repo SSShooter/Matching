@@ -66,10 +66,10 @@ router.get('/get_wx_access_token', function (req, res, next) {
               Player.findOne({
                 openid: openid
               }, function (err, doc) {
-                console.log(doc)
                 if (!err && doc) { //无错误并已经注册
                   if (doc.team) { //有所在队伍
                     req.session.team = doc.team;
+                    req.session.status = doc.status;
                     res.redirect('/myTeam');
                   } else //无所在队伍
                     res.redirect('/teamselect');
