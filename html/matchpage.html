@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/purecss@0.6.2/build/pure-min.css" integrity="sha384-UQiGfs9ICog+LwheBSRCt1o5cbyKIHbwjWscjemyBMT9YCUMZffs6UqUTd0hObXD"
+    crossorigin="anonymous">
+  <link rel="stylesheet" href="./css/common.css">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>主页</title>
+  <style>
+    body {
+      text-align: center;
+    }
+
+    .spinner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 2rem;
+      height: 2rem;
+      background-color: #333;
+      -webkit-animation: sk-rotateplane 1.2s infinite ease-in-out;
+      animation: sk-rotateplane 1.2s infinite ease-in-out;
+    }
+
+    .join-button {
+      position: absolute;
+      top: 0;
+      left: 3rem;
+      width: 8rem;
+      height: 2rem;
+      background-color: #333;
+      color: #fff;
+      border: none;
+    }
+
+    .msg {
+      position: absolute;
+      top: 0;
+      left: 3rem;
+      width: 8rem;
+      height: 2rem;
+    }
+
+    @-webkit-keyframes sk-rotateplane {
+      0% {
+        -webkit-transform: perspective(120px)
+      }
+      50% {
+        -webkit-transform: perspective(120px) rotateY(180deg)
+      }
+      100% {
+        -webkit-transform: perspective(120px) rotateY(180deg) rotateX(180deg)
+      }
+    }
+
+    @keyframes sk-rotateplane {
+      0% {
+        transform: perspective(120px) rotateX(0deg) rotateY(0deg);
+        -webkit-transform: perspective(120px) rotateX(0deg) rotateY(0deg)
+      }
+      50% {
+        transform: perspective(120px) rotateX(-180.1deg) rotateY(0deg);
+        -webkit-transform: perspective(120px) rotateX(-180.1deg) rotateY(0deg)
+      }
+      100% {
+        transform: perspective(120px) rotateX(-180deg) rotateY(-179.9deg);
+        -webkit-transform: perspective(120px) rotateX(-180deg) rotateY(-179.9deg);
+      }
+    }
+
+    .fade-enter-active,
+    .fade-leave-active {
+      transition: opacity .5s
+    }
+
+    .fade-enter,
+    .fade-leave-active {
+      opacity: 0
+    }
+
+    .matchdiv {
+      width: 15rem;
+      height: 3rem;
+      margin: 1rem auto;
+    }
+
+    .test {
+      position: relative;
+      margin: auto;
+      width: 14rem;
+      height: 2.5rem;
+    }
+
+    .modal {
+      position: absolute;
+      left: 0;
+      top: 0;
+      background-color: rgba(0, 0, 0, .5);
+      height: 100vh;
+      width: 100vw;
+    }
+
+    .scoreinput {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      margin-top: -100px;
+      margin-left: -150px;
+      height: 200px;
+      width: 300px;
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+      background-color: #fff;
+      font-size: 2rem;
+      font-weight: bolder;
+    }
+
+    .score {
+      height: 50px;
+      width: 50px;
+    }
+
+    [v-cloak] {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="main" v-cloak>
+    <transition-group tag="div" name="fade" mode="out-in">
+      <div key='only' class="modal" v-show="modalShow">
+        <div class="scoreinput">
+          <p>请输入双方比分</p>
+          <input class="score" v-model="myscore" placeholder="自己">:<input class="score" v-model="rivalscore" placeholder="对手">
+          <button class="pure-button pure-input-1" @click="submit">确定</button>
+        </div>
+      </div>
+    </transition-group>
+    <div class="matchdiv">
+      <!--span使用没有宽度高度-->
+      <transition-group tag="div" name="fade" mode="out-in" class="test">
+        <div key="s0" v-if="matching===0" class="spinner"></div>
+        <button key="s1" v-if="matching===1" class="join-button pure-input-1" @click="join">加入比赛</button>
+        <button key="s2" v-else-if="matching===0" class="join-button pure-input-1" @click="cancel">取消</button>
+        <p key="s3" v-else class="msg">匹配成功</p>
+      </transition-group>
+    </div>
+    <span>{{name}}</span>
+    <span>{{score}}</span>
+    <div v-show="matching===2">你的对手：{{rival}}</div>
+    <br>
+    <button class="pure-button pure-input-1" @click="showTheModal" v-bind:class="{ 'pure-button-disabled': submitDisabled }">{{submitState}}</button>
+    <button class="pure-button pure-input-1" @click="logout">log out</button>
+  </div>
+  <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+  <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+  <script src="https://unpkg.com/vue/dist/vue.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script>
+    var homepage = new Vue({
+      el: '#main',
+      data: {
+        name: '',
+        score: 0, //这是天梯分
+        matching: 1, //0匹配中1未匹配2匹配成功
+        modalShow: false,
+        submitState: '提交成绩',
+        submitDisabled: true,
+        rival: '',
+        myscore: 0, //这是比赛得分
+        rivalscore: 0
+      },
+      beforeCreate: function () {
+        var _this = this;
+        var socket = this.socket = io();
+        socket.on('match successfully', function (rival) {
+          _this.submitState = '提交成绩';
+          _this.submitDisabled = false;
+          _this.matching = 2;
+          _this.rival = rival;
+        });
+        socket.on('submit successfully', function () {
+          _this.matching = 1;
+          _this.submitDisabled = true;
+          _this.submitState = '本次成绩已提交成功';
+          axios.get('/getinfo')
+            .then(function (res) {
+              console.log(res);
+              _this.name = res.data.name;
+              _this.score = res.data.score;
+            });
+        });
+        socket.on('submit wrong', function () {
+          _this.submitDisabled = false;
+          _this.submitState = '双方提交成绩不一致';
+        });
+        socket.on('wait rival submit', function () {
+          _this.submitState = '等待对方上传成绩';
+        });
+        axios.get('/getinfo')
+          .then(function (res) {
+            _this.socket.emit('online', res.data.name);//上线（用于匹配完断线重新获取name信息）
+            console.log(res);
+            _this.name = res.data.name;
+            _this.score = res.data.score;
+            if (res.data.state === 1) {
+              _this.rival = res.data.lastrival;
+              _this.matching = 2;
+              _this.submitDisabled = false;
+            }
+          });
+      },
+      methods: {
+        logout: function () {
+          window.location.href = 'http://' + location.host + '/logout';
+        },
+        join: function () {
+          this.matching = 0;
+          this.socket.emit('join', this.score, this.name);
+        },
+        cancel: function () {
+          this.matching = 1;
+          this.socket.emit('cancel');
+        },
+        showTheModal: function () {
+          this.modalShow = true;
+        },
+        submit: function () {
+          this.submitDisabled = true;
+          this.modalShow = false;
+          this.socket.emit('submit', this.name, this.rival, this.myscore, this.rivalscore);
+        }
+      }
+    })
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<title>搜索队伍</title>
+	<link rel="stylesheet" href="http://res.wx.qq.com/open/libs/weui/1.1.2/weui.min.css" />
+	<style>
+		[v-cloak] {
+			display: none;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="page" v-cloak>
+		<div class="weui-search-bar" id="search_bar">
+			<form class="weui-search-bar__form">
+				<div class="weui-search-bar__box">
+					<i class="weui-icon-search"></i>
+					<input type="search" class="weui-search-bar__input" id="search_input" placeholder="搜索" />
+					<a href="javascript:" class="weui-icon-clear" id="search_clear"></a>
+				</div>
+				<label for="search_input" class="weui-search-bar__label" id="search_text">
+            <i class="weui-icon-search"></i>
+            <span>搜索</span>
+        </label>
+			</form>
+			<a href="javascript:" class="weui-search-bar__cancel-btn" id="search_cancel">取消</a>
+		</div>
+		<div class="weui-cells weui-cells_access search_show" id="search_show">
+			<div v-for="team in result" class="weui-cell" @click="jointeam" :data-name="team.name">
+				<div class="weui-cell__bd weui-cell_primary">
+					<p>{{team.name}}</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script type="text/javascript" src="https://res.wx.qq.com/open/libs/weuijs/1.1.1/weui.min.js"></script>
+	<script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.1.3/vue.js"></script>
+	<script>
+		var page = new Vue({
+			el: '#page',
+			data: {
+				result: []
+			},
+			mounted: function () {
+				var _this = this;
+				weui.searchBar('#search_bar');
+				$('.weui-search-bar__input').bind('input propertychange', function () {
+					_this.result = [];
+					var url = '/searchteam';
+					var data = {
+						keyword: this.value
+					}
+					$.post(url, data, function (res) {
+						console.log(res);
+						_this.result = res.doc;
+					});
+				});
+			},
+			methods: {
+				jointeam: function (ev) {
+					var thisTeamName;
+					var ev = ev || window.event;
+					var target = ev.target || ev.srcElement;
+					while (1) { //事件委托运用
+						if (target.className == 'weui-cell') {
+							thisTeamName = target.dataset.name;
+							break
+						}
+						target = target.parentNode;
+					}
+					weui.confirm('是否加入' + thisTeamName + '?', {
+						title: '注意',
+						buttons: [{
+							label: '不加入',
+							type: 'default',
+							onClick: function () {
+								console.log('no')
+							}
+						}, {
+							label: '加入',
+							type: 'primary',
+							onClick: function () {
+								console.log('yes')
+								var loading = weui.loading('loading');
+								$.post('/jointeam', {
+									teamname: thisTeamName
+								}, function (res) {
+									if (res.code == 0) {
+										loading.hide();
+										window.location = '/myteam';
+									}
+								});
+							}
+						}]
+					});
+				}
+			}
+		})
+	</script>
+</body>
+
+</html>

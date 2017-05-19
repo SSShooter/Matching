@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<title>我的队伍</title>
+	<link rel="stylesheet" href="http://res.wx.qq.com/open/libs/weui/1.1.2/weui.min.css" />
+	<style>
+		body {
+			background-color: #f8f8f8;
+		}
+
+		.checkinfo {
+			position: relative;
+			z-index: 9999999;
+		}
+
+		#showinfo {
+			text-align: left;
+		}
+
+		#showinfo>span {
+			display: inline-block;
+			padding-top: .3rem;
+			padding-bottom: .3rem;
+			width: 5rem;
+		}
+
+		[v-cloak] {
+			display: none;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="page" v-cloak>
+		<div class="weui-panel weui-panel_access">
+			<div class="weui-panel__hd">队伍信息</div>
+			<div class="weui-panel__bd">
+				<a href="javascript:void(0);" class="weui-media-box weui-media-box_appmsg">
+					<div class="weui-media-box__hd">
+						<img class="weui-media-box__thumb" src="http://tva1.sinaimg.cn/crop.316.53.496.496.180/686d7361jw1f3q2lpig4cj20vk0hswn3.jpg"
+						  alt="">
+					</div>
+					<div class="weui-media-box__bd">
+						<h4 id="teamname" class="weui-media-box__title">{{teamname}}</h4>
+						<p id="teamdesc" class="weui-media-box__desc">{{teamdesc}}</p>
+					</div>
+				</a>
+			</div>
+		</div>
+		<div class="weui-panel weui-panel_access">
+			<div class="weui-panel__hd">队员信息</div>
+			<div v-for="(member,index) in members" class="weui-panel__bd" @click="check" :data-key="index">
+				<a href="javascript:void(0);" class="weui-media-box weui-media-box_appmsg">
+					<div class="weui-media-box__hd">
+						<img class="weui-media-box__thumb" :src="member.info.headimgurl" alt="">
+					</div>
+					<div class="weui-media-box__bd">
+						<h4 class="weui-media-box__title">{{member.name}}</h4>
+						<p class="weui-media-box__desc">{{ member.status==1 ? '队长' : member.status==2 ? '队员' : member.status==3 ? '替补' : member.status==4 ? '待审核' : ''}}</p>
+					</div>
+					<div v-if="member.status==4 && mystatus==1" class="weui-cell__ft" :data-operatee="member.openid">
+						<span @click="allow">允许</span>/<span @click="disallow">拒绝</span>
+					</div>
+				</a>
+			</div>
+
+			<div style="display: none;" class="checkinfo">
+				<div class="weui-mask"></div>
+				<div class="weui-dialog">
+					<div class="weui-dialog__hd"><strong class="weui-dialog__title">成员资料</strong></div>
+					<div class="weui-dialog__bd" id="showinfo">
+						<span>姓名</span>{{members[showInfo].name}}<br>
+						<span>联系方式</span>{{members[showInfo].tel}}<br>
+						<span>性别</span>{{members[showInfo].gender}}<br>
+						<span>身高</span>{{members[showInfo].height}}<br>
+						<span>体重</span>{{members[showInfo].weight}}<br>
+						<span>位置</span>{{members[showInfo].position}}<br>
+						<span>称号</span>{{members[showInfo].title}}<br>
+					</div>
+					<div class="weui-dialog__ft" @click="fadeout">
+						<a href="javascript:;" class="weui-dialog__btn weui-dialog__btn_primary">确定</a>
+					</div>
+				</div>
+			</div>
+
+			<div class="weui-btn-area" v-if="mystatus!=1">
+				<a class="weui-btn weui-btn_warn" href="javascript:" id="showTooltips" @click="leftteam">退队</a>
+			</div>
+			<div class="weui-btn-area" v-if="mystatus==1">
+				<a class="weui-btn weui-btn_warn" href="javascript:" id="showTooltips" @click="dissolveteam">解散队伍</a>
+			</div>
+		</div>
+		<script type="text/javascript" src="https://res.wx.qq.com/open/libs/weuijs/1.1.1/weui.min.js"></script>
+		<script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.1.3/vue.js"></script>
+		<script>
+			var page = new Vue({
+				el: '#page',
+				data: {
+					teamname: '',
+					teamdesc: '',
+					leader: {},
+					members: [],
+					mystatus: 0,
+					showInfo: 0
+				},
+				mounted: function () {
+					var _this = this;
+					$.post('/teaminfo', function (res) {
+						_this.teamname = res.teamname;
+						_this.teamdesc = res.teamdesc;
+						_this.members = res.member;
+						_this.mystatus = res.mystatus;
+						if (res.mystatus == 0) {
+							weui.alert('队长拒绝了你的加入请求', function () {
+								window.location = '/teamselect';
+							});
+						}
+						console.log(res);
+					});
+				},
+				methods: {
+					check: function () {
+						var ev = ev || window.event;
+						var target = ev.target || ev.srcElement;
+						while (1) { //事件委托运用
+							if (target.className == 'weui-cell__ft') {
+								break;
+							}
+							if (target.className == 'weui-panel__bd') {
+								this.showInfo = target.dataset.key;
+								$('.checkinfo').fadeIn();
+								break;
+							}
+							target = target.parentNode;
+						}
+					},
+					allow: function (e) {
+						var operatee = e.target.parentNode.dataset.operatee;
+						weui.confirm('确定允许加入队伍？', function () {
+							$.post('/allow', {
+								id: operatee
+							}, function (res) {
+								if (res.code == 0)
+									location.reload();
+							});
+						});
+					},
+					disallow: function (e) {
+						var operatee = e.target.parentNode.dataset.operatee;
+						weui.confirm('确定不允许加入队伍？', function () {
+							$.post('/disallow', {
+								id: operatee
+							}, function (res) {
+								if (res.code == 0)
+									location.reload();
+							});
+						});
+					},
+					leftteam: function () {
+						weui.confirm('确定退出队伍？', function () {
+							$.post('/leftteam', function (res) {
+								console.log(res);
+							});
+						});
+					},
+					dissolveteam: function () {
+						weui.confirm('确定解散队伍？', function () {
+							$.post('/dissolveteam', {
+								id: operatee
+							}, function (res) {
+								console.log(res);
+							});
+						});
+					},
+					fadeout: function () {
+						$('.checkinfo').fadeOut();
+					}
+				}
+			})
+		</script>
+</body>
+
+</html>

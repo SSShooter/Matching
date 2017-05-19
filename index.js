@@ -7,7 +7,6 @@ var port = process.env.PORT || 80;
 var bs = require('binarysearch');
 var Team = require('./models/Team.js');
 var Player = require('./models/Player.js');
-var MatchState = require('./models/matchstate.js');
 var bodyParser = require('body-parser');
 var session = require('express-session');
 var oauth = require('./routes/oauth');
@@ -16,6 +15,8 @@ var fs = require('fs');
 var mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
 /**
+ * get /oauth 微信登陆
+ * get /myteam 跳到我的队伍页面
  * 
  */
 app.use(express.static('public'));
@@ -44,27 +45,13 @@ app.use(function (req, res, next) {
   }
 });
 
-app.get('/', function (req, res) {
-  res.sendFile(__dirname + '/homepage.html');
-});
-
-app.get('/getinfo', function (req, res) {
-  var query = MatchState.findOne({
-    name: req.session.name
-  });
-  var promise = query.exec();
-  promise.then(function (doc) {
-    res.json(doc);
-  });
-});
-
 app.get('/logout', function (req, res) {
   req.session = null;
   res.redirect('/login');
 });
 
 app.get('/myTeam', function (req, res) {
-  res.sendFile(__dirname + '/myTeam.html');
+  res.sendFile(__dirname + '/html/myTeam.html');
 });
 
 app.post('/allow', function (req, res) {
@@ -85,7 +72,7 @@ app.post('/disallow', function (req, res) {
     openid: req.body.id
   }, function (err, doc) {
     console.log('disallow');
-    doc.status = req.session.status = 0; //身份改为无所属
+    doc.status = 0; //身份改为无所属
     doc.save(function () {
       Team.findOne({ //从队员列表移除
         name: req.session.team
@@ -141,41 +128,35 @@ app.post('/teaminfo', function (req, res) {
 });
 
 app.get('/newteam', function (req, res) {
-  res.sendFile(__dirname + '/newTeam.html');
+  res.sendFile(__dirname + '/html/newTeam.html');
 });
 
 app.post('/newteam', function (req, res) {
-  if (!req.session.openid) {
-    res.json({
-      code: 1,
-      msg: '请重新登录'
-    });
-  } else {
-    let newTeam = new Team(req.body);
-    newTeam.save(function (err, doc) {
-      if (err) {
-        res.json({
-          code: 1,
-          msg: '数据库错误',
-          err: err
-        });
-      } else {
-        //队伍创建成功
-        Player.findOne({
-          openid: req.session.openid
-        }, function (err, doc) {
-          doc.team = req.body.name;
-          doc.status = req.session.status = 1;
-          doc.save();
-        })
-        req.session.team = req.body.name;
-        res.json({
-          code: 0,
-          msg: doc
-        });
-      }
-    });
-  }
+  req.body.score = 0;//初始化分数为0
+  let newTeam = new Team(req.body);
+  newTeam.save(function (err, doc) {
+    if (err) {
+      res.json({
+        code: 1,
+        msg: '数据库错误',
+        err: err
+      });
+    } else {
+      //队伍创建成功
+      Player.findOne({
+        openid: req.session.openid
+      }, function (err, doc) {
+        doc.team = req.body.name;
+        doc.status = req.session.status = 1;
+        doc.save();
+      })
+      req.session.team = req.body.name;
+      res.json({
+        code: 0,
+        msg: doc
+      });
+    }
+  });
 });
 
 app.post('/info', function (req, res) {
@@ -228,7 +209,7 @@ function randomString(len) {　　
   return pwd;
 }
 app.get('/searchteam', function (req, res) {
-  res.sendFile(__dirname + '/searchTeam.html');
+  res.sendFile(__dirname + '/html/searchTeam.html');
 });
 
 app.post('/searchteam', function (req, res) {
@@ -316,11 +297,11 @@ app.post('/leftteam', function (req, res) { //不用传入参数，使用session
 });
 
 app.get('/matchInfo', function (req, res) {
-  res.sendFile(__dirname + '/matchInfo.html');
+  res.sendFile(__dirname + '/html/matchInfo.html');
 });
 
 app.get('/register', function (req, res) {
-  res.sendFile(__dirname + '/Register.html');
+  res.sendFile(__dirname + '/html/Register.html');
 });
 
 app.post('/register', function (req, res) {
@@ -351,7 +332,11 @@ app.post('/register', function (req, res) {
 });
 
 app.get('/teamselect', function (req, res) {
-  res.sendFile(__dirname + '/teamSelect.html');
+  res.sendFile(__dirname + '/html/teamSelect.html');
+});
+
+app.get('/matchpage', function (req, res) {
+  res.sendFile(__dirname + '/html/matchpage.html');
 });
 
 var que = [];
@@ -359,9 +344,18 @@ var score_que = [];
 var lastRival = {};
 var cache = {};
 
+app.get('/getinfo', function (req, res) {
+  var query = Team.findOne({
+    name: req.session.team
+    //>注意点<
+  }, function (err, doc) {
+    res.json(doc);
+  });
+});
+
 io.on('connection', function (socket) {
   socket.on('online', function (id) {
-    socket.Teamname = id; //在socket缓存id
+    socket.Teamname = id; //在socket缓存队伍名
     console.log(socket.Teamname);
   });
   socket.on('join', function (score, id) { //加入匹配存入分数与id
@@ -386,14 +380,14 @@ io.on('connection', function (socket) {
         console.log('与' + score_que[test] + '分玩家匹配')
         score_que.splice(test, 1); //匹配成功，从等待列表删除
         let Team2_id = que.splice(test, 1); //得到的是数组，所以下面使用Team2_id[0]
-        MatchState.findOne({
+        Team.findOne({
           name: Team1.Teamname
         }, function (err, doc) {
           doc.lastrival = Team2.Teamname;
           doc.state = 1;
           doc.save();
         });
-        MatchState.findOne({
+        Team.findOne({
           name: Team2.Teamname
         }, function (err, doc) {
           doc.lastrival = Team1.Teamname;
@@ -434,6 +428,7 @@ io.on('connection', function (socket) {
     }
   });
   socket.on('submit', function (Teamname, rival, myScore, rivalScore) {
+    console.log(Teamname, rival, myScore, rivalScore);
     var winner;
     if (Number(myScore) > Number(rivalScore)) winner = 1;
     else if (Number(myScore) == Number(rivalScore)) winner = 0;
@@ -451,13 +446,13 @@ io.on('connection', function (socket) {
       if (cache[rival] === rivalResult) {
         console.log(winner);
         ScoreCalc(Teamname, rival, winner, result, rivalResult);
-        MatchState.findOne({
+        Team.findOne({
           name: Teamname
         }, function (err, doc) {
           doc.state = 0;
           doc.save();
         });
-        MatchState.findOne({
+        Team.findOne({
           name: rival
         }, function (err, doc) {
           doc.state = 0;
@@ -482,11 +477,11 @@ io.on('connection', function (socket) {
 
 
 function ScoreCalc(Team1_name, Team2_name, winner, Team1_result, Team2_result) {
-  var query1 = MatchState.findOne({
+  var query1 = Team.findOne({
     name: Team1_name
   });
   var promise1 = query1.exec();
-  var query2 = MatchState.findOne({
+  var query2 = Team.findOne({
     name: Team2_name
   });
   var promise2 = query2.exec();
@@ -532,9 +527,7 @@ function ScoreCalc(Team1_name, Team2_name, winner, Team1_result, Team2_result) {
       value[0].save();
       value[1].save();
     }
-
   });
-
 }
 
 //等待上传分数，双方都上传后进行分数计算，计算后进入数据库
