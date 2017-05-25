@@ -132,7 +132,7 @@ app.get('/newteam', function (req, res) {
 });
 
 app.post('/newteam', function (req, res) {
-  req.body.score = 0;//初始化分数为0
+  req.body.score = 0; //初始化分数为0
   let newTeam = new Team(req.body);
   newTeam.save(function (err, doc) {
     if (err) {
@@ -147,14 +147,16 @@ app.post('/newteam', function (req, res) {
         openid: req.session.openid
       }, function (err, doc) {
         doc.team = req.body.name;
-        doc.status = req.session.status = 1;
-        doc.save();
+        doc.status = 1;
+        req.session.status = 1;
+        req.session.team = req.body.name;
+        doc.save(function () {
+          res.json({
+            code: 0,
+            msg: doc
+          });
+        });
       })
-      req.session.team = req.body.name;
-      res.json({
-        code: 0,
-        msg: doc
-      });
     }
   });
 });
@@ -305,6 +307,7 @@ app.get('/register', function (req, res) {
 });
 
 app.post('/register', function (req, res) {
+  console.log(req.body);
   req.body.openid = req.session.openid;
   req.body.info = req.session.info;
   if (!req.session.openid) {
@@ -357,6 +360,42 @@ io.on('connection', function (socket) {
   socket.on('online', function (id) {
     socket.Teamname = id; //在socket缓存队伍名
     console.log(socket.Teamname);
+  });
+  socket.on('quickjoin', function (score, id) { //快速加入，所有问题均不检查
+    let test = bs.closest(score_que, score);
+    if (test === -1) { //无人等待匹配
+      console.log('没人，等待匹配')
+      score_que[0] = score;
+      que[0] = socket.id;
+    } else {
+      let Team1 = _.findWhere(io.sockets.sockets, {
+        id: socket.id
+      });
+      let Team2 = _.findWhere(io.sockets.sockets, {
+        id: que[test]
+      });
+      console.log('与' + score_que[test] + '分玩家匹配')
+      score_que.splice(test, 1); //匹配成功，从等待列表删除
+      let Team2_id = que.splice(test, 1); //得到的是数组，所以下面使用Team2_id[0]
+      Team.findOne({
+        name: Team1.Teamname
+      }, function (err, doc) {
+        doc.lastrival = Team2.Teamname;
+        doc.state = 1;
+        doc.save();
+      });
+      Team.findOne({
+        name: Team2.Teamname
+      }, function (err, doc) {
+        doc.lastrival = Team1.Teamname;
+        doc.state = 1;
+        doc.save();
+      });
+      lastRival[Team1.Teamname] = Team2.Teamname;
+      lastRival[Team2.Teamname] = Team1.Teamname;
+      Team1.emit('match successfully', Team2.Teamname);
+      Team2.emit('match successfully', Team1.Teamname);
+    }
   });
   socket.on('join', function (score, id) { //加入匹配存入分数与id
     let test = bs.closest(score_que, score); //查找最近分数最近的对手，返回数组位置

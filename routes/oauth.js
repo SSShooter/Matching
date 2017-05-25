@@ -45,7 +45,7 @@ router.get('/get_wx_access_token', function (req, res, next) {
             url: 'https://api.weixin.qq.com/sns/userinfo?access_token=' + access_token + '&openid=' + openid + '&lang=zh_CN',
           },
           function (error, response, body) {
-            if(!openid){
+            if (!openid) {
               res.send('超时，请重新登录');
               return;
             }
@@ -107,7 +107,7 @@ router.get('/get_wx_access_token2', function (req, res, next) {
             url: 'https://api.weixin.qq.com/sns/userinfo?access_token=' + access_token + '&openid=' + openid + '&lang=zh_CN',
           },
           function (error, response, body) {
-            if(!openid){
+            if (!openid) {
               res.send('超时，请重新登录');
               return;
             }
@@ -119,9 +119,13 @@ router.get('/get_wx_access_token2', function (req, res, next) {
                 openid: openid
               }, function (err, doc) {
                 if (!err && doc) { //无错误并已经注册
-                  if (doc.team && doc.status == 1) { //有所在队伍
-                    req.session.team = doc.team;
-                    res.redirect('/matchpage');
+                  if (doc.team) { //有所在队伍
+                    if (doc.status == 1) { //并且是队长
+                      req.session.team = doc.team;
+                      res.redirect('/matchpage');
+                    }else{
+                      res.send('请联系队长进行此操作');
+                    }
                   }
                 }
               })

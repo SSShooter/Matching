@@ -15,7 +15,7 @@
 </head>
 
 <body>
-  <form>
+  <form id="form">
     <div class="weui-cells__title">个人信息</div>
     <div class="weui-cells weui-cells_form">
       <div class="weui-cell">
@@ -77,19 +77,19 @@
         </div>
       </div>
     </div>
-    <div class="weui-cells__tips">报名前请先登记信息</div>
-    <div class="weui-btn-area">
-      <a class="weui-btn weui-btn_primary" href="javascript:" id="showTooltips" onclick="submit()">确定</a>
-    </div>
   </form>
+  <div class="weui-cells__tips">报名前请先登记信息</div>
+  <div class="weui-btn-area">
+    <a class="weui-btn weui-btn_primary" href="javascript:;" id="showTooltips" onclick="submit()">确定</a>
+  </div>
   <script type="text/javascript" src="https://res.wx.qq.com/open/libs/weuijs/1.1.1/weui.min.js"></script>
   <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
   <script>
     function submit() {
-      var data = $('form').serialize();//要有效一定要在input写上name属性
+      var data = $('#form').serialize(); //要有效一定要在input写上name属性
       console.log(data);
       $('.weui-cell_warn').removeClass('weui-cell_warn');
-      weui.form.validate('form', function (error) {
+      weui.form.validate('#form', function (error) {
         if (!error) {
           var loading = weui.loading('提交中...');
           $.post('/register', data, function (res) {
@@ -104,17 +104,19 @@
               });
             } else {
               loading.hide();
-              weui.alert(res.msg, { title: '错误' });
+              weui.alert(res.msg, {
+                title: '错误'
+              });
             }
           });
         }
         // return true; // 当return true时，不会显示错误
       }, {
-          regexp: {
-            IDNUM: /(?:^\d{15}$)|(?:^\d{18}$)|^\d{17}[\dXx]$/,
-            VCODE: /^.{4}$/
-          }
-        });
+        regexp: {
+          IDNUM: /(?:^\d{15}$)|(?:^\d{18}$)|^\d{17}[\dXx]$/,
+          VCODE: /^.{4}$/
+        }
+      });
     }
   </script>
 </body>
