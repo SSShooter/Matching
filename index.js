@@ -33,17 +33,17 @@ app.use(session({
 
 app.use('/oauth', oauth);
 
-app.use(function (req, res, next) {
-  if (!req.session.info) {
-    if (req.url == "/oauth/wx_login") {
-      next(); //如果请求的地址是登录则通过，进行下一个请求  
-    } else {
-      res.send('请重新授权');
-    }
-  } else {
-    next();
-  }
-});
+// app.use(function (req, res, next) {
+//   if (!req.session.info) {
+//     if (req.url == "/oauth/wx_login") {
+//       next(); //如果请求的地址是登录则通过，进行下一个请求  
+//     } else {
+//       res.send('请重新授权');
+//     }
+//   } else {
+//     next();
+//   }
+// });
 
 app.get('/logout', function (req, res) {
   req.session = null;
@@ -55,6 +55,7 @@ app.get('/myTeam', function (req, res) {
 });
 
 app.post('/allow', function (req, res) {
+  conosole.log(req.body);
   Player.findOne({
     openid: req.body.id
   }, function (err, doc) {
@@ -310,6 +311,7 @@ app.post('/register', function (req, res) {
   console.log(req.body);
   req.body.openid = req.session.openid;
   req.body.info = req.session.info;
+  req.body.matchdata = [];
   if (!req.session.openid) {
     res.json({
       code: 1,
@@ -340,6 +342,68 @@ app.get('/teamselect', function (req, res) {
 
 app.get('/matchpage', function (req, res) {
   res.sendFile(__dirname + '/html/matchpage.html');
+});
+
+//裁判
+app.get('/back', function (req, res) {
+  res.sendFile(__dirname + '/html/dataupdate.html');
+});
+
+app.post('/getplayer', function (req, res) {
+  var t1 = req.body.team1;
+  var t2 = req.body.team2;
+  var p1 = Team.findOne({
+    name: t1
+  }).exec();
+  var p2 = Team.findOne({
+    name: t2
+  }).exec();
+  Promise.all([p1, p2]).then(value => {
+    var mate = [value[0].leader];
+    mate = mate.concat(value[0].mate);
+    mate = mate.concat(value[1].leader);
+    mate = mate.concat(value[1].mate);
+    var mate_p = mate.map(function (val) {
+      return Player.findOne({
+        openid: val
+      }).exec();
+    });
+    Promise.all(mate_p).then(function (val) {
+      res.json({
+        mate: val
+      });
+    });
+  });
+});
+
+
+app.post('/personaldata', function (req, res) {
+  console.log(req.body);
+  for (let i = 0; i < 10; i++) {
+    if(!req.body[i + 'openid'])break;
+    Player.findOne({
+      openid: req.body[i + 'openid']
+    }, function (err, doc) {
+      var data = [req.body[i + 'lanban'], req.body[i + 'zhugong'], req.body[i + 'qiangduan'], req.body[i + 'gaimao'], req.body[i + 'fangui'], req.body[i + 'defen']];
+      doc.matchdata.push(data);
+      doc.markModified('matchdata');
+      doc.save();
+    });
+  }
+});
+
+app.get('/getpersonaldata', function (req, res) {
+  res.sendFile(__dirname + '/html/getpersonalmatchdata.html');
+});
+
+app.post('/getpersonaldata', function (req, res) {
+  Player.findOne({
+      openid: req.session.openid
+    }, function (err, doc) {
+      res.json({
+        data: doc.matchdata
+      });
+    });
 });
 
 var que = [];
@@ -466,6 +530,28 @@ io.on('connection', function (socket) {
       delete cache[socket.Teamname]; //如果断线用户上传了成绩一定要删除，下次再重新上传
     }
   });
+
+  socket.on('judgesubmit', function (team1, team2, score1, score2) { //玩家不上传成绩的情况，裁判上传
+    delete cache[team1];
+    delete cache[team2];
+    var winner;
+    if (Number(score1) > Number(score2)) winner = 1;
+    else if (Number(score1) == Number(score2)) winner = 0;
+    else winner = 2;
+    ScoreCalc(team1, team2, winner, score1, score2);
+    Team.findOne({
+      name: team1
+    }, function (err, doc) {
+      doc.state = 0;
+      doc.save();
+    });
+    Team.findOne({
+      name: team2
+    }, function (err, doc) {
+      doc.state = 0;
+      doc.save();
+    });
+  });
   socket.on('submit', function (Teamname, rival, myScore, rivalScore) {
     console.log(Teamname, rival, myScore, rivalScore);
     var winner;
@@ -513,6 +599,9 @@ io.on('connection', function (socket) {
     }
   });
 });
+
+
+
 
 
 function ScoreCalc(Team1_name, Team2_name, winner, Team1_result, Team2_result) {

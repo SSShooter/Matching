@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>我的战绩</title>
+  <link rel="stylesheet" href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+    crossorigin="anonymous">
+</head>
+
+<body>
+  <div id="main">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>篮板</th>
+          <th>助攻</th>
+          <th>抢断</th>
+          <th>盖帽</th>
+          <th>犯规</th>
+          <th>得分</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr v-for="(val,index) in personalmatchdata">
+          <td>{{index}}</td>
+          <td>{{val[0]}}</td>
+          <td>{{val[1]}}</td>
+          <td>{{val[2]}}</td>
+          <td>{{val[3]}}</td>
+          <td>{{val[4]}}</td>
+          <td>{{val[5]}}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <script src="https://unpkg.com/vue/dist/vue.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <script>
+    var main = new Vue({
+      el: '#main',
+      data:{
+        personalmatchdata:[]
+      },
+      mounted: function () {
+        var _this = this;
+        axios.post('/getpersonaldata')
+          .then(function (res) {
+            console.log(res);
+            _this.personalmatchdata = res.data.data;
+          })
+          .catch(function (error) {
+            console.log(error);
+          });
+      },
+    })
+  </script>
+</body>
+
+</html>

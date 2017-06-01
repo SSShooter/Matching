@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+  <link rel="stylesheet" href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+    crossorigin="anonymous">
+  <style>
+    input {
+      width: 50px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="main">
+    <div id="getteamname" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+      <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+          <p>请输入双方队伍队名</p>
+          <input v-model="teamname1" type="text">
+          <input v-model="teamname2" type="text">
+          <button type="button" class="btn btn-primary" @click="getteammate">确定</button>
+        </div>
+      </div>
+    </div>
+    <div id="table">
+      <form>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>姓名</th>
+              <th>篮板</th>
+              <th>助攻</th>
+              <th>抢断</th>
+              <th>盖帽</th>
+              <th>犯规</th>
+              <th>得分</th>
+              <th>禁止更改</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr v-for="(player,index) in players">
+              <td>{{index}}</td>
+              <td><input :name="index+'xingming'" type="text" :value="player.name" readonly="readonly" ></td>
+              <td><input :name="index+'lanban'" type="text"></td>
+              <td><input :name="index+'zhugong'" type="text"></td>
+              <td><input :name="index+'qiangduan'" type="text"></td>
+              <td><input :name="index+'gaimao'" type="text"></td>
+              <td><input :name="index+'fangui'" type="text"></td>
+              <td><input :name="index+'defen'" type="text"></td>
+              <td><input :name="index+'openid'" type="text" :value="player.openid" readonly="readonly"></td>
+            </tr>
+          </tbody>
+        </table>
+      </form>
+      <button class="pure-button" @click="submit">确定</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue/dist/vue.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <script src="https://cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+    crossorigin="anonymous"></script>
+  <script>
+    var page = new Vue({
+      el: '#main',
+      data: {
+        teamname1: '',
+        teamname2: '',
+        players: ['AAA']
+      },
+      mounted: function () {
+        $('#getteamname').modal('toggle');
+      },
+      methods: {
+        submit: function () {
+          var inputs = document.getElementsByTagName('input'),
+            token = true;
+          for (var i = 0; i < inputs.length; i++) {
+            if (!inputs[i].value) {
+              token = false;
+            }
+          }
+          if (token) {
+            var data = $('form').serialize(); //要有效一定要在input写上name属性
+            console.log(data);
+            axios.post('/personaldata', data)
+              .then(function (res) {
+                console.log(res);
+              })
+              .catch(function (error) {
+                console.log(error);
+              });
+          }else{
+            alert('数据未填写完整');
+          }
+        },
+        getteammate: function () {
+          var _this = this;
+          axios.post('/getPlayer', {
+              team1: _this.teamname1,
+              team2: _this.teamname2
+            })
+            .then(function (res) {
+              _this.players = res.data.mate;
+              $('#getteamname').modal('toggle');
+            })
+            .catch(function (error) {
+              console.log(error);
+            });
+        }
+      }
+    })
+  </script>
+</body>
+
+</html>
