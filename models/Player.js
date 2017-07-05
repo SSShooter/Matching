@@ -1,5 +1,5 @@
-var mongoose = require('mongoose');
-mongoose.connection;
+var mongoose = require('mongoose')
+mongoose.connection
 
 var PlayerSchama = mongoose.Schema({
   name: String,
@@ -15,8 +15,8 @@ var PlayerSchama = mongoose.Schema({
   info: {},
   title: String,
   team: String,
-  status: Number, //0无所属1队长2队员3替补4邀请中
-  matchdata: [] //每场比赛的数据
-});
-var PlayerModel = mongoose.model('Player', PlayerSchama);
-module.exports = PlayerModel;
+  status: Number, // 0无所属1队长2队员3替补4邀请中
+  matchdata: [] // 每场比赛的数据
+})
+var PlayerModel = mongoose.model('Player', PlayerSchama)
+module.exports = PlayerModel
