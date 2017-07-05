@@ -5,15 +5,18 @@ var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var port = process.env.PORT || 80;
 var bs = require('binarysearch');
-var Team = require('./models/Team.js');
-var Player = require('./models/Player.js');
+var Team = require('./models/Team');
+var Player = require('./models/Player');
 var bodyParser = require('body-parser');
 var session = require('express-session');
 var oauth = require('./routes/oauth');
+var htmlrouter = require('./routes/htmlrouter');
 var formidable = require('formidable');
 var fs = require('fs');
 var mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
+var moment = require('moment');
+moment.locale('zh-cn');
 /**
  * get /oauth 微信登陆
  * get /myteam 跳到我的队伍页面
@@ -33,34 +36,123 @@ app.use(session({
 
 app.use('/oauth', oauth);
 
-// app.use(function (req, res, next) {
-//   if (!req.session.info) {
-//     if (req.url == "/oauth/wx_login") {
-//       next(); //如果请求的地址是登录则通过，进行下一个请求  
-//     } else {
-//       res.send('请重新授权');
-//     }
-//   } else {
-//     next();
-//   }
-// });
+app.use('/', htmlrouter);
 
-app.get('/logout', function (req, res) {
-  req.session = null;
-  res.redirect('/login');
+//裁判获取两队成员
+app.post('/getplayer', function (req, res) {
+  var t1 = req.body.team1;
+  var t2 = req.body.team2;
+  console.log(t1, t2);
+  var p1 = Team.findOne({
+    name: t1
+  });
+  var p2 = Team.findOne({
+    name: t2
+  });
+  Promise.all([p1, p2]).then(value => {
+    var mate = [value[0].leader];
+    mate = mate.concat(value[0].mate);
+    mate = mate.concat(value[1].leader);
+    mate = mate.concat(value[1].mate);
+    console.log(mate);
+    var mate_p = mate.map(function (val) {
+      return Player.findOne({
+        openid: val
+      }).exec();
+    });
+    Promise.all(mate_p).then(function (val) {
+      res.json({
+        mate: val
+      });
+    });
+  });
 });
 
-app.get('/myTeam', function (req, res) {
-  res.sendFile(__dirname + '/html/myTeam.html');
+//裁判记录球员数据
+app.post('/personaldata', function (req, res) {
+  console.log(req.body);
+  var promises = [];
+  for (let i = 0; i < 10; i++) {
+    if (!req.body[i + 'openid']) break;
+    Player.findOne({
+      openid: req.body[i + 'openid']
+    }, function (err, doc) {
+      var data = [req.body[i + 'lanban'], req.body[i + 'zhugong'], req.body[i + 'qiangduan'], req.body[i + 'gaimao'], req.body[i + 'fangui'], req.body[i + 'defen']];
+      doc.matchdata.push(data);
+      doc.markModified('matchdata');
+      promises.push(doc.save());
+    });
+  }
+  Promise.all(promises).then(function (val) {
+    res.json({
+      code: 0
+    });
+  }, function (err) {
+    res.json({
+      code: 1,
+      msg: err
+    });
+  });
 });
 
+//裁判上传成绩
+app.post('/judgesubmit', function (req, res) { 
+  var team1 = req.body.team1,
+    team2 = req.body.team2,
+    score1 = req.body.score1,
+    score2 = req.body.score2,
+    court = req.body.court;
+  var winner;
+  if (Number(score1) > Number(score2)) winner = 1;
+  else if (Number(score1) == Number(score2)) winner = 0;
+  else winner = 2;
+  retrieveCourt(court);
+  console.log(usingCourt, unuseCourt);
+  ScoreCalc(team1, team2, winner, score1, score2, function () {
+    res.json({
+      code: 0,
+      msg: 'ok'
+    })
+  });
+});
+
+//登陆检验
+app.use(function (req, res, next) {
+  if (!req.session.openid) {
+    res.json({
+      code: 1,
+      msg: '请重新登录'
+    });
+  } else {
+    next();
+  }
+});
+
+//允许进队
 app.post('/allow', function (req, res) {
-  conosole.log(req.body);
-  Player.findOne({
+  Player.update({
     openid: req.body.id
-  }, function (err, doc) {
-    doc.status = 2; //身份改为队员
-    doc.save(function () {
+  }, {
+    status: 2
+  }, function (err) {
+    res.json({
+      code: 0
+    });
+  });
+});
+
+//拒绝进队
+app.post('/disallow', function (req, res) {
+  Player.update({//更改玩家的队伍状态
+    openid: req.body.id
+  }, {
+    status: 0
+  }, function (err) {
+    Team.update({ //从队员列表移除
+      name: req.session.team
+    }, {
+      mate: _.without(team.mate, req.body.id)
+    }, function (err) {
       res.json({
         code: 0
       });
@@ -68,20 +160,29 @@ app.post('/allow', function (req, res) {
   });
 });
 
-app.post('/disallow', function (req, res) {
-  Player.findOne({
-    openid: req.body.id
+//解散队伍
+app.post('/dissolveteam', function (req, res) {
+  Team.findOneAndRemove({
+    name: req.session.team
   }, function (err, doc) {
-    console.log('disallow');
-    doc.status = 0; //身份改为无所属
-    doc.save(function () {
-      Team.findOne({ //从队员列表移除
-        name: req.session.team
-      }, function (err, team) {
-        team.mate = _.without(team.mate, req.body.id);
-        team.save(function () {
+    console.log(doc);
+    var matePromise = [Player.findOne({
+      openid: doc.leader
+    }).exec()];
+    doc.mate.forEach(function (val) {
+      matePromise.push(Player.findOne({
+        openid: val
+      }).exec());
+    });
+    Promise.all(matePromise).then(function (value) {
+      console.log(value);
+      value.forEach(function (val) {
+        val.status = 0;
+        val.team = '';
+        val.save(function () {
           res.json({
-            code: 0
+            code: 0,
+            msg: 'ok'
           });
         });
       })
@@ -89,6 +190,7 @@ app.post('/disallow', function (req, res) {
   });
 });
 
+//获取队伍信息（包括所有成员）
 app.post('/teaminfo', function (req, res) {
   Team.findOne({
     name: req.session.team
@@ -110,17 +212,17 @@ app.post('/teaminfo', function (req, res) {
       matestatePromise.push(Player.findOne({
         openid: val
       }).exec());
-    })
-    var teamname = doc.name;
-    var teamdesc = doc.desc;
+    });
     Promise.all(matestatePromise).then(function (value) {
       res.json({
         code: 0,
         msg: 'ok',
         teamname: doc.name,
         teamdesc: doc.descript,
+        list: doc.list,
         member: value,
-        mystatus: req.session.status
+        mystatus: req.session.status,
+        myopenid: req.session.openid
       });
     }, function (err) {
       console.log(err);
@@ -128,10 +230,7 @@ app.post('/teaminfo', function (req, res) {
   });
 });
 
-app.get('/newteam', function (req, res) {
-  res.sendFile(__dirname + '/html/newTeam.html');
-});
-
+//新建队伍
 app.post('/newteam', function (req, res) {
   req.body.score = 0; //初始化分数为0
   let newTeam = new Team(req.body);
@@ -157,14 +256,14 @@ app.post('/newteam', function (req, res) {
             msg: doc
           });
         });
-      })
+      });
     }
   });
 });
 
+//获取微信用户情报
 app.post('/info', function (req, res) {
   var info = req.session.info;
-  console.log(info);
   res.json({
     code: 0,
     msg: 'ok',
@@ -172,6 +271,7 @@ app.post('/info', function (req, res) {
   });
 });
 
+//上传队伍logo（可用，但前端裁剪未完成）
 app.post('/uploadlogo', function (req, res) {
   var form = new formidable.IncomingForm();
   form.parse(req, function (err, fields, files) {
@@ -201,6 +301,7 @@ app.post('/uploadlogo', function (req, res) {
   });
 });
 
+//随机字符串命名
 function randomString(len) {　　
   len = len || 4;　　
   var $chars = 'ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678'; /****默认去掉了容易混淆的字符oOLl,9gq,Vv,Uu,I1****/ 　　
@@ -211,10 +312,8 @@ function randomString(len) {　　
   }　　
   return pwd;
 }
-app.get('/searchteam', function (req, res) {
-  res.sendFile(__dirname + '/html/searchTeam.html');
-});
 
+//搜索队伍
 app.post('/searchteam', function (req, res) {
   let keyword = req.body.keyword;
   if (!keyword) return;
@@ -239,178 +338,87 @@ app.post('/searchteam', function (req, res) {
   });
 });
 
+//发起加入队伍请求
 app.post('/jointeam', function (req, res) {
-  if (!req.session.openid) {
-    res.json({
-      code: 1,
-      msg: '请重新登录'
-    });
-  } else {
-    Player.findOne({
-      openid: req.session.openid
-    }, function (err, doc) {
-      doc.team = req.body.teamname;
-      doc.status = req.session.status = 4;
-      console.log(req.session.status);
-      doc.save(function (err) {
-        Team.findOne({
-          name: req.body.teamname
-        }, function (err, doc) {
-          doc.mate.push(req.session.openid);
-          doc.save(function () {
-            req.session.team = req.body.teamname;
-            res.json({
-              code: 0,
-              msg: 'ok'
-            });
+  Player.findOne({
+    openid: req.session.openid
+  }, function (err, doc) {
+    doc.team = req.body.teamname;
+    doc.status = req.session.status = 4;
+    doc.save(function (err) {
+      Team.findOne({
+        name: req.body.teamname
+      }, function (err, doc) {
+        doc.mate.push(req.session.openid);
+        doc.save(function () {
+          req.session.team = req.body.teamname;
+          res.json({
+            code: 0,
+            msg: 'ok'
           });
         });
-      });
-    });
-  }
-});
-
-app.post('/leftteam', function (req, res) { //不用传入参数，使用session解决问题
-  if (!req.session.openid) {
-    res.json({
-      code: 1,
-      msg: '请重新登录'
-    });
-  } else {
-    Player.findOne({
-      openid: req.session.openid
-    }, function (err, doc) {
-      doc.team = '';
-      doc.status = req.session.status = 0;
-      console.log(req.session.status);
-      doc.save();
-    });
-    Team.findOne({
-      name: req.session.team
-    }, function (err, doc) {
-      doc.mate = _.without(doc.mate, req.session.openid);
-      doc.save();
-    });
-    req.session.team = '';
-    res.json({
-      code: 0,
-      msg: 'ok'
-    });
-  }
-});
-
-app.get('/matchInfo', function (req, res) {
-  res.sendFile(__dirname + '/html/matchInfo.html');
-});
-
-app.get('/register', function (req, res) {
-  res.sendFile(__dirname + '/html/Register.html');
-});
-
-app.post('/register', function (req, res) {
-  console.log(req.body);
-  req.body.openid = req.session.openid;
-  req.body.info = req.session.info;
-  req.body.matchdata = [];
-  if (!req.session.openid) {
-    res.json({
-      code: 1,
-      msg: '请重新登录'
-    });
-  } else {
-    let newPlayer = new Player(req.body);
-    newPlayer.save(function (err, doc) {
-      if (err) {
-        res.json({
-          code: 1,
-          msg: '数据库错误',
-          err: err
-        });
-      } else {
-        res.json({
-          code: 0,
-          msg: doc
-        });
-      }
-    });
-  }
-});
-
-app.get('/teamselect', function (req, res) {
-  res.sendFile(__dirname + '/html/teamSelect.html');
-});
-
-app.get('/matchpage', function (req, res) {
-  res.sendFile(__dirname + '/html/matchpage.html');
-});
-
-//裁判
-app.get('/back', function (req, res) {
-  res.sendFile(__dirname + '/html/dataupdate.html');
-});
-
-app.post('/getplayer', function (req, res) {
-  var t1 = req.body.team1;
-  var t2 = req.body.team2;
-  var p1 = Team.findOne({
-    name: t1
-  }).exec();
-  var p2 = Team.findOne({
-    name: t2
-  }).exec();
-  Promise.all([p1, p2]).then(value => {
-    var mate = [value[0].leader];
-    mate = mate.concat(value[0].mate);
-    mate = mate.concat(value[1].leader);
-    mate = mate.concat(value[1].mate);
-    var mate_p = mate.map(function (val) {
-      return Player.findOne({
-        openid: val
-      }).exec();
-    });
-    Promise.all(mate_p).then(function (val) {
-      res.json({
-        mate: val
       });
     });
   });
 });
 
-
-app.post('/personaldata', function (req, res) {
-  console.log(req.body);
-  for (let i = 0; i < 10; i++) {
-    if(!req.body[i + 'openid'])break;
-    Player.findOne({
-      openid: req.body[i + 'openid']
-    }, function (err, doc) {
-      var data = [req.body[i + 'lanban'], req.body[i + 'zhugong'], req.body[i + 'qiangduan'], req.body[i + 'gaimao'], req.body[i + 'fangui'], req.body[i + 'defen']];
-      doc.matchdata.push(data);
-      doc.markModified('matchdata');
-      doc.save();
-    });
-  }
+//离开队伍
+app.post('/leftteam', function (req, res) { //不用传入参数，使用session解决问题
+  Player.findOne({//更改玩家队伍状态
+    openid: req.session.openid
+  }, function (err, doc) {
+    doc.team = '';
+    doc.status = req.session.status = 0;
+    console.log(req.session.status);
+    doc.save();
+  });
+  Team.findOne({//在队伍中除名
+    name: req.session.team
+  }, function (err, doc) {
+    doc.mate = _.without(doc.mate, req.session.openid);
+    doc.save();
+  });
+  req.session.team = '';
+  res.json({
+    code: 0,
+    msg: 'ok'
+  });
 });
 
-app.get('/getpersonaldata', function (req, res) {
-  res.sendFile(__dirname + '/html/getpersonalmatchdata.html');
+//用户注册（信息登记）
+app.post('/register', function (req, res) {
+  req.body.openid = req.session.openid;
+  req.body.info = req.session.info;
+  req.body.matchdata = [];
+  let newPlayer = new Player(req.body);
+  newPlayer.save(function (err, doc) {
+    if (err) {
+      res.json({
+        code: 1,
+        msg: '数据库错误',
+        err: err
+      });
+    } else {
+      res.json({
+        code: 0,
+        msg: doc
+      });
+    }
+  });
 });
 
+//获取个人比赛数据
 app.post('/getpersonaldata', function (req, res) {
   Player.findOne({
-      openid: req.session.openid
-    }, function (err, doc) {
-      res.json({
-        data: doc.matchdata
-      });
+    openid: req.session.openid
+  }, function (err, doc) {
+    res.json({
+      data: doc.matchdata
     });
+  });
 });
 
-var que = [];
-var score_que = [];
-var lastRival = {};
-var cache = {};
-
+//队伍情报获取
 app.get('/getinfo', function (req, res) {
   var query = Team.findOne({
     name: req.session.team
@@ -420,201 +428,18 @@ app.get('/getinfo', function (req, res) {
   });
 });
 
-io.on('connection', function (socket) {
-  socket.on('online', function (id) {
-    socket.Teamname = id; //在socket缓存队伍名
-    console.log(socket.Teamname);
-  });
-  socket.on('quickjoin', function (score, id) { //快速加入，所有问题均不检查
-    let test = bs.closest(score_que, score);
-    if (test === -1) { //无人等待匹配
-      console.log('没人，等待匹配')
-      score_que[0] = score;
-      que[0] = socket.id;
-    } else {
-      let Team1 = _.findWhere(io.sockets.sockets, {
-        id: socket.id
-      });
-      let Team2 = _.findWhere(io.sockets.sockets, {
-        id: que[test]
-      });
-      console.log('与' + score_que[test] + '分玩家匹配')
-      score_que.splice(test, 1); //匹配成功，从等待列表删除
-      let Team2_id = que.splice(test, 1); //得到的是数组，所以下面使用Team2_id[0]
-      Team.findOne({
-        name: Team1.Teamname
-      }, function (err, doc) {
-        doc.lastrival = Team2.Teamname;
-        doc.state = 1;
-        doc.save();
-      });
-      Team.findOne({
-        name: Team2.Teamname
-      }, function (err, doc) {
-        doc.lastrival = Team1.Teamname;
-        doc.state = 1;
-        doc.save();
-      });
-      lastRival[Team1.Teamname] = Team2.Teamname;
-      lastRival[Team2.Teamname] = Team1.Teamname;
-      Team1.emit('match successfully', Team2.Teamname);
-      Team2.emit('match successfully', Team1.Teamname);
-    }
-  });
-  socket.on('join', function (score, id) { //加入匹配存入分数与id
-    let test = bs.closest(score_que, score); //查找最近分数最近的对手，返回数组位置
-    console.log(id);
-    if (test === -1) { //无人等待匹配
-      console.log('没人，等待匹配')
-      score_que[0] = score;
-      que[0] = socket.id;
-    } else if ((score_que[test] - score) < 500) { //匹配到旗鼓相当的对手
-      let Team1 = _.findWhere(io.sockets.sockets, {
-        id: socket.id
-      });
-      let Team2 = _.findWhere(io.sockets.sockets, {
-        id: que[test]
-      });
-      if (lastRival[Team1.Teamname] === Team2.Teamname) { //与上场比赛是同一对手，所以不能匹配
-        console.log('与上场比赛是同一对手，等待其他匹配');
-        let key = bs.insert(score_que, score);
-        que.splice(key, 0, socket.id);
-      } else {
-        console.log('与' + score_que[test] + '分玩家匹配')
-        score_que.splice(test, 1); //匹配成功，从等待列表删除
-        let Team2_id = que.splice(test, 1); //得到的是数组，所以下面使用Team2_id[0]
-        Team.findOne({
-          name: Team1.Teamname
-        }, function (err, doc) {
-          doc.lastrival = Team2.Teamname;
-          doc.state = 1;
-          doc.save();
-        });
-        Team.findOne({
-          name: Team2.Teamname
-        }, function (err, doc) {
-          doc.lastrival = Team1.Teamname;
-          doc.state = 1;
-          doc.save();
-        });
-        lastRival[Team1.Teamname] = Team2.Teamname;
-        lastRival[Team2.Teamname] = Team1.Teamname;
-        Team1.emit('match successfully', Team2.Teamname);
-        Team2.emit('match successfully', Team1.Teamname);
-      }
-    } else { //差距太大
-      console.log('无旗鼓相当的对手，等待匹配')
-      let key = bs.insert(score_que, score);
-      que.splice(key, 0, socket.id);
-    }
-    console.log(que);
-    console.log(score_que);
-    console.log('\n');
-  });
-  socket.on('cancel', function () {
-    let key = _.indexOf(que, socket.id);
-    console.log(socket.id + '玩家取消匹配');
-    score_que.splice(key, 1);
-    que.splice(key, 1);
-    console.log(que);
-  });
-  socket.on('disconnect', function (reason) {
-    console.log(reason);
-    let key = _.indexOf(que, socket.id);
-    if (key != -1) { //未匹配用户断线
-      console.log(socket.id + '玩家断线');
-      score_que.splice(key, 1); //链接断开，从等待列表删除
-      que.splice(key, 1);
-      console.log(que);
-    } else { //已匹配用户断线
-      delete cache[socket.Teamname]; //如果断线用户上传了成绩一定要删除，下次再重新上传
-    }
-  });
-
-  socket.on('judgesubmit', function (team1, team2, score1, score2) { //玩家不上传成绩的情况，裁判上传
-    delete cache[team1];
-    delete cache[team2];
-    var winner;
-    if (Number(score1) > Number(score2)) winner = 1;
-    else if (Number(score1) == Number(score2)) winner = 0;
-    else winner = 2;
-    ScoreCalc(team1, team2, winner, score1, score2);
-    Team.findOne({
-      name: team1
-    }, function (err, doc) {
-      doc.state = 0;
-      doc.save();
-    });
-    Team.findOne({
-      name: team2
-    }, function (err, doc) {
-      doc.state = 0;
-      doc.save();
-    });
-  });
-  socket.on('submit', function (Teamname, rival, myScore, rivalScore) {
-    console.log(Teamname, rival, myScore, rivalScore);
-    var winner;
-    if (Number(myScore) > Number(rivalScore)) winner = 1;
-    else if (Number(myScore) == Number(rivalScore)) winner = 0;
-    else winner = 2;
-    let result = myScore + ':' + rivalScore; //自己的结果
-    let rivalResult = rivalScore + ':' + myScore; //对手的结果
-    //自己的结果缓存
-    cache[Teamname] = result;
-    if (cache[rival]) {
-      //存在cache[rival]即对方已经上传成绩
-      //双方成绩应该必须一样（但是前后相反）
-      let rivalSocket = _.findWhere(io.sockets.sockets, {
-        Teamname: rival
-      });
-      if (cache[rival] === rivalResult) {
-        console.log(winner);
-        ScoreCalc(Teamname, rival, winner, result, rivalResult);
-        Team.findOne({
-          name: Teamname
-        }, function (err, doc) {
-          doc.state = 0;
-          doc.save();
-        });
-        Team.findOne({
-          name: rival
-        }, function (err, doc) {
-          doc.state = 0;
-          doc.save();
-        });
-        socket.emit('submit successfully');
-        rivalSocket.emit('submit successfully');
-        delete cache[Teamname];
-        delete cache[rival];
-      } else {
-        //提交的成绩不一样,清除缓存等待重新上传
-        delete cache[Teamname];
-        delete cache[rival];
-        socket.emit('submit wrong');
-        rivalSocket.emit('submit wrong');
-      }
-    } else {
-      socket.emit('wait rival submit');
-    }
-  });
-});
-
-
-
-
-
-function ScoreCalc(Team1_name, Team2_name, winner, Team1_result, Team2_result) {
-  var query1 = Team.findOne({
+//天梯胜负得分计算
+function ScoreCalc(Team1_name, Team2_name, winner, Team1_result, Team2_result, cb) {
+  var promise1 = Team.findOne({
     name: Team1_name
-  });
-  var promise1 = query1.exec();
-  var query2 = Team.findOne({
+  }).exec();
+  var promise2 = Team.findOne({
     name: Team2_name
-  });
-  var promise2 = query2.exec();
+  }).exec();
   Promise.all([promise1, promise2]).then(value => {
-    if (winner != 0) { //非平分的情况
+    value[0].state = 0;
+    value[1].state = 0;
+    if (winner !== 0) { //非平分的情况
       let Team1_score = value[0].score;
       let Team2_score = value[1].score;
       let Ea = 1 / (1 + Math.pow(10, (Team2_score - Team1_score) / 400));
@@ -632,34 +457,238 @@ function ScoreCalc(Team1_name, Team2_name, winner, Team1_result, Team2_result) {
       if (Team1_new_score < 0) Team1_new_score = 0;
       if (Team2_new_score < 0) Team2_new_score = 0;
       value[0].score = Team1_new_score;
-      value[0].list.push({
-        rival: Team2_name,
-        matchScore: Team1_result
-      });
       value[1].score = Team2_new_score;
-      value[1].list.push({
-        rival: Team1_name,
-        matchScore: Team2_result
-      });
-      value[0].save();
-      value[1].save();
-    } else { //平分的情况，不用计算直接保存0比0的战绩
-      value[0].list.push({
-        rival: Team2_name,
-        matchScore: Team1_result
-      });
-      value[1].list.push({
-        rival: Team1_name,
-        matchScore: Team2_result
-      });
-      value[0].save();
-      value[1].save();
     }
+    value[0].list.push({
+      rival: Team2_name,
+      matchScore: Team1_result + ':' + Team2_result
+    });
+    value[1].list.push({
+      rival: Team1_name,
+      matchScore: Team2_result + ':' + Team1_result
+    });
+    var p1 = value[0].save();
+    var p2 = value[1].save();
+    Promise.all([p1, p2]).then(cb());
   });
 }
 
-//等待上传分数，双方都上传后进行分数计算，计算后进入数据库
+//队列
+var que = [];
 
+//分数队列 于队列相对应，用于按分数匹配
+var score_que = [];
+
+//记录各队伍上一个对手
+var lastRival = {};
+
+//未使用场地
+var unuseCourt = [1,2,3,4];
+
+//已使用场地
+var usingCourt = [];
+
+//最大场地数
+var Maxcourt = 4;
+
+//分配场地
+function distributeCourt() {
+  var number = unuseCourt.shift();
+  usingCourt.push({
+    number: number,
+    time: +new Date()
+  });
+  return number
+}
+
+//回收场地
+function retrieveCourt(court) {
+  court = Number(court);
+  unuseCourt.push(court);
+  var temp = _.pluck(usingCourt, 'number');
+  var index = _.indexOf(temp, court);
+  usingCourt.splice(index, 1);
+}
+
+//检查是否有空场
+function hasEmptyCourt() {
+  if (_.isEmpty(unuseCourt)) return false;
+  else return true;
+}
+
+io.on('connection', function (socket) {
+  //上线用于队伍页面信息更新推送
+  socket.on('playeronline', function (id) {
+    socket.openid = id; //在socket缓存队伍名
+    console.log(socket.openid);
+  });
+  //入队推送
+  socket.on('someone join', function (teamname) {
+    Team.findOne({
+      name: teamname
+    }, function (err, team) {
+      var mate = [team.leader];
+      mate = mate.concat(team.mate);
+      for (let i = 0; i < mate.length; i++) {
+        let temp = _.findWhere(io.sockets.sockets, {
+          openid: mate[i]
+        });
+        console.log(mate[i]);
+        console.log(temp);
+        if (temp) {
+          temp.emit('someone join');
+        }
+      }
+    });
+  });
+  //离队推送
+  socket.on('someone leave', function (teamname) {
+    Team.findOne({
+      name: teamname
+    }, function (err, team) {
+      var mate = [team.leader];
+      mate = mate.concat(team.mate);
+      for (let i = 0; i < mate.length; i++) {
+        let temp = _.findWhere(io.sockets.sockets, {
+          openid: mate[i]
+        });
+        console.log(mate[i]);
+        console.log(temp);
+        if (temp) {
+          temp.emit('someone leave');
+        }
+      }
+    });
+  })
+
+  socket.on('online', function (id, score) {
+    if (!hasEmptyCourt()) {
+      console.log(usingCourt[0].time);
+      var fromNow = moment(usingCourt[0].time).add(13, 'm').fromNow();
+      console.log(fromNow);
+      socket.emit('court full', fromNow);
+    }
+    socket.Teamname = id; //在socket缓存队伍名
+    socket.Score = score;
+    console.log(socket.Teamname);
+  });
+
+  //快速匹配请求
+  socket.on('quickjoin', function (score, id) { //快速加入，所有问题均不检查
+    let test = bs.closest(score_que, score);
+    if (test === -1) { //无人等待匹配
+      console.log('没人，等待匹配');
+      score_que[0] = score;
+      que[0] = socket.id;
+    } else {
+      let Team1 = _.findWhere(io.sockets.sockets, {
+        id: socket.id
+      });
+      let Team2 = _.findWhere(io.sockets.sockets, {
+        id: que[test]
+      });
+      var courtNumber = distributeCourt();
+      console.log('与' + score_que[test] + '分玩家匹配');
+      console.log(usingCourt, unuseCourt);
+      score_que.splice(test, 1); //匹配成功，从等待列表删除
+      let Team2_id = que.splice(test, 1); //得到的是数组，所以下面使用Team2_id[0]
+      console.log(Team1.Teamname, Team2.Teamname)
+      Team.update({
+        name: Team1.Teamname
+      }, {
+        state: 1,
+        lastrival: Team2.Teamname
+      }).exec();
+      Team.update({
+        name: Team2.Teamname
+      }, {
+        state: 1,
+        lastrival: Team1.Teamname,
+      }).exec();
+      lastRival[Team1.Teamname] = Team2.Teamname;
+      lastRival[Team2.Teamname] = Team1.Teamname;
+      Team1.emit('match successfully', Team2.Teamname, Team2.Score);
+      Team2.emit('match successfully', Team1.Teamname, Team1.Score);
+    }
+    console.log(que);
+    console.log(score_que);
+    console.log('\n');
+  });
+
+  //匹配请求
+  socket.on('join', function (score, id) { //加入匹配存入分数与id
+    let test = bs.closest(score_que, score); //查找最近分数最近的对手，返回数组位置
+    if (test === -1) { //无人等待匹配
+      console.log('没人，等待匹配');
+      score_que[0] = score;
+      que[0] = socket.id;
+    } else if ((score_que[test] - score) < 500) { //匹配到旗鼓相当的对手
+      let Team1 = _.findWhere(io.sockets.sockets, {
+        id: socket.id
+      });
+      let Team2 = _.findWhere(io.sockets.sockets, {
+        id: que[test]
+      });
+      if (lastRival[Team1.Teamname] === Team2.Teamname) { //与上场比赛是同一对手，所以不能匹配
+        console.log('与上场比赛是同一对手，等待其他匹配');
+        let key = bs.insert(score_que, score);
+        que.splice(key, 0, socket.id);
+      } else {
+        var courtNumber = distributeCourt();
+        console.log('与' + score_que[test] + '分玩家匹配');
+        console.log(usingCourt, unuseCourt);
+        score_que.splice(test, 1); //匹配成功，从等待列表删除
+        let Team2_id = que.splice(test, 1); //得到的是数组，所以下面使用Team2_id[0]
+        console.log(Team1.Teamname, Team2.Teamname)
+        Team.update({
+          name: Team1.Teamname
+        }, {
+          state: 1,
+          lastrival: Team2.Teamname
+        }).exec();
+        Team.update({
+          name: Team2.Teamname
+        }, {
+          state: 1,
+          lastrival: Team1.Teamname,
+        }).exec();
+        lastRival[Team1.Teamname] = Team2.Teamname;
+        lastRival[Team2.Teamname] = Team1.Teamname;
+        Team1.emit('match successfully', Team2.Teamname, Team2.Score);
+        Team2.emit('match successfully', Team1.Teamname, Team1.Score);
+      }
+    } else { //差距太大
+      console.log('无旗鼓相当的对手，等待匹配');
+      let key = bs.insert(score_que, score);
+      que.splice(key, 0, socket.id);
+    }
+    console.log(que);
+    console.log(score_que);
+    console.log('\n');
+  });
+
+  //取消匹配请求
+  socket.on('cancel', function () {
+    let key = _.indexOf(que, socket.id);
+    console.log(socket.id + '玩家取消匹配');
+    score_que.splice(key, 1);
+    que.splice(key, 1);
+    console.log(que);
+  });
+  socket.on('disconnect', function (reason) {
+    console.log(reason);
+    let key = _.indexOf(que, socket.id);
+    if (key != -1) { //未匹配用户断线
+      console.log(socket.id + '玩家断线');
+      score_que.splice(key, 1); //链接断开，从等待列表删除
+      que.splice(key, 1);
+      console.log(que);
+    }
+  });
+});
+
+
+//等待上传分数，双方都上传后进行分数计算，计算后进入数据库
 http.listen(port, function () {
   console.log('listening on *:' + port);
 });

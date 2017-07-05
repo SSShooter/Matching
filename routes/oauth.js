@@ -16,8 +16,8 @@ app.use(session({
 }));
 
 /* 微信登陆 */
-var AppID = 'wxb837da69673a3248';
-var AppSecret = '44ccddc563b4817eed79a5a628842950';
+var AppID = 'wx6cb2304c498a1465';
+var AppSecret = '2225ea79fc50f98d1fddbd12aa319a80';
 router.get('/wx_login', function (req, res, next) {
   // 第一步：用户同意授权，获取code
   var router = 'get_wx_access_token';

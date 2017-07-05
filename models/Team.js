@@ -5,6 +5,7 @@ var teamSchama = mongoose.Schema({
     unique: true,
     type: String
   },
+  logo:String,
   descript: String,
   leader: String,
   mate: [],

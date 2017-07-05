@@ -8,32 +8,48 @@
   <title>我的战绩</title>
   <link rel="stylesheet" href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
     crossorigin="anonymous">
+  <style>
+    tr,
+    th {
+      text-align: center;
+    }
+
+    [v-cloak] {
+      display: none;
+    }
+  </style>
 </head>
 
 <body>
-  <div id="main">
+  <div id="main" v-cloak>
     <table class="table">
       <thead>
         <tr>
           <th>#</th>
+          <th>得分</th>
           <th>篮板</th>
           <th>助攻</th>
           <th>抢断</th>
           <th>盖帽</th>
-          <th>犯规</th>
-          <th>得分</th>
         </tr>
       </thead>
 
       <tbody>
         <tr v-for="(val,index) in personalmatchdata">
           <td>{{index}}</td>
+          <td>{{val[5]}}</td>
           <td>{{val[0]}}</td>
           <td>{{val[1]}}</td>
           <td>{{val[2]}}</td>
           <td>{{val[3]}}</td>
-          <td>{{val[4]}}</td>
-          <td>{{val[5]}}</td>
+        </tr>
+        <tr v-if="personalmatchdata[0]">
+          <td>平均</td>
+          <td>{{dataAvg[5]}}</td>
+          <td>{{dataAvg[0]}}</td>
+          <td>{{dataAvg[1]}}</td>
+          <td>{{dataAvg[2]}}</td>
+          <td>{{dataAvg[3]}}</td>
         </tr>
       </tbody>
     </table>
@@ -44,8 +60,9 @@
   <script>
     var main = new Vue({
       el: '#main',
-      data:{
-        personalmatchdata:[]
+      data: {
+        personalmatchdata: [],
+        dataAvg: [0, 0, 0, 0, 0, 0]
       },
       mounted: function () {
         var _this = this;
@@ -53,6 +70,14 @@
           .then(function (res) {
             console.log(res);
             _this.personalmatchdata = res.data.data;
+            for (var i = 0; i < _this.personalmatchdata.length; i++) {
+              for (var j = 0; j < 6; j++) {
+                _this.dataAvg[j] += Number(_this.personalmatchdata[i][j]);
+              }
+            }
+            _this.dataAvg = _this.dataAvg.map(function (val) {
+              return (val / _this.personalmatchdata.length).toFixed(1);
+            });
           })
           .catch(function (error) {
             console.log(error);

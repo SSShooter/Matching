@@ -12,21 +12,65 @@
     input {
       width: 50px;
     }
+
+    .form-control {
+      width: 100px;
+      float: left;
+    }
+
+    .opacityZero {
+      opacity: 0;
+    }
   </style>
 </head>
 
 <body>
   <div id="main">
-    <div id="getteamname" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
-      <div class="modal-dialog modal-sm" role="document">
+    <div class="modal fade" tabindex="-1" role="dialog" id="getteamname">
+      <div class="modal-dialog" role="document">
         <div class="modal-content">
-          <p>请输入双方队伍队名</p>
-          <input v-model="teamname1" type="text">
-          <input v-model="teamname2" type="text">
-          <button type="button" class="btn btn-primary" @click="getteammate">确定</button>
+          <div class="modal-header">
+            <h4 class="modal-title">数据录入</h4>
+          </div>
+          <div class="modal-body">
+            <p>请输入双方队伍队名</p>
+            <input v-model="teamname1" type="text">
+            <input v-model="teamname2" type="text">
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" @click="getteammate">确定</button>
+          </div>
         </div>
+        <!-- /.modal-content -->
       </div>
+      <!-- /.modal-dialog -->
     </div>
+    <!-- /.modal -->
+    <div class="modal fade" tabindex="-1" role="dialog" id="upload">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h4 class="modal-title">数据录入</h4>
+          </div>
+          <div class="modal-body">
+            <p>请输入双方队伍队名</p>
+            <input v-model="teamname1" type="text">
+            <input v-model="teamname2" type="text">
+            <p>请输入比分</p>
+            <input v-model="score1" type="text">
+            <input v-model="score2" type="text">
+            <p>请输入场地</p>
+            <input v-model="court" type="number">
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" @click="judge">确定</button>
+          </div>
+        </div>
+        <!-- /.modal-content -->
+      </div>
+      <!-- /.modal-dialog -->
+    </div>
+    <!-- /.modal -->
     <div id="table">
       <form>
         <table class="table">
@@ -40,27 +84,45 @@
               <th>盖帽</th>
               <th>犯规</th>
               <th>得分</th>
-              <th>禁止更改</th>
+              <th class="opacityZero">禁止更改</th>
             </tr>
           </thead>
 
           <tbody>
             <tr v-for="(player,index) in players">
               <td>{{index}}</td>
-              <td><input :name="index+'xingming'" type="text" :value="player.name" readonly="readonly" ></td>
-              <td><input :name="index+'lanban'" type="text"></td>
-              <td><input :name="index+'zhugong'" type="text"></td>
-              <td><input :name="index+'qiangduan'" type="text"></td>
-              <td><input :name="index+'gaimao'" type="text"></td>
-              <td><input :name="index+'fangui'" type="text"></td>
-              <td><input :name="index+'defen'" type="text"></td>
-              <td><input :name="index+'openid'" type="text" :value="player.openid" readonly="readonly"></td>
+              <td><input :name="index+'xingming'" type="text" :value="player.name" readonly="readonly"></td>
+              <td><input value=0 :name="index+'lanban'" type="number"></td>
+              <td><input value=0 :name="index+'zhugong'" type="number"></td>
+              <td><input value=0 :name="index+'qiangduan'" type="number"></td>
+              <td><input value=0 :name="index+'gaimao'" type="number"></td>
+              <td><input value=0 :name="index+'fangui'" type="number"></td>
+              <td><input value=0 :name="index+'defen'" type="number"></td>
+              <td class="opacityZero"><input :name="index+'openid'" type="text" :value="player.openid" readonly="readonly"></td>
             </tr>
           </tbody>
         </table>
       </form>
-      <button class="pure-button" @click="submit">确定</button>
     </div>
+    <select v-model="playerOption" class="form-control">
+      <option v-for="(player,index) in players" :value="index">{{player.name}}</option>
+    </select>
+    <select v-model="scoreOption" class="form-control">
+      <option value=1>1</option>
+      <option value=2>2</option>
+      <option value=3>3</option>
+      <option value=4>4</option>
+      <option value=4>5</option>
+    </select>
+    <select v-model="itemOption" class="form-control">
+      <option value="lanban">篮板</option>
+      <option value="zhugong">助攻</option>
+      <option value="qiangduan">抢断</option>
+      <option value="gaimao">盖帽</option>
+      <option value="defen">得分</option>
+    </select>
+    <button type="button" class="btn btn-primary" @click="addScore">添加分数</button>
+    <button style="display: block" type="button" class="btn btn-primary" @click="submit">提交数据</button>
   </div>
 
   <script src="https://unpkg.com/vue/dist/vue.js"></script>
@@ -74,33 +136,45 @@
       data: {
         teamname1: '',
         teamname2: '',
-        players: ['AAA']
+        score1: 0,
+        score2: 0,
+        court: '',
+        players: ['AAA'],
+        playerOption: '',
+        itemOption: '',
+        scoreOption: ''
       },
       mounted: function () {
-        $('#getteamname').modal('toggle');
+        $('#getteamname').modal({
+          keyboard: false,
+          backdrop: 'static',
+          show: true
+        });
+        $('#upload').modal({
+          keyboard: false,
+          backdrop: 'static',
+          show: false
+        })
       },
       methods: {
+        addScore: function () {
+          var temp = document.querySelector('input[name="' + this.playerOption + this.itemOption + '"]').value;
+          document.querySelector('input[name="' + this.playerOption + this.itemOption + '"]').value = Number(temp) +
+            Number(this.scoreOption);
+        },
         submit: function () {
-          var inputs = document.getElementsByTagName('input'),
-            token = true;
-          for (var i = 0; i < inputs.length; i++) {
-            if (!inputs[i].value) {
-              token = false;
-            }
-          }
-          if (token) {
-            var data = $('form').serialize(); //要有效一定要在input写上name属性
-            console.log(data);
-            axios.post('/personaldata', data)
-              .then(function (res) {
-                console.log(res);
-              })
-              .catch(function (error) {
-                console.log(error);
-              });
-          }else{
-            alert('数据未填写完整');
-          }
+          var data = $('form').serialize(); //要有效一定要在input写上name属性
+          console.log(data);
+          axios.post('/personaldata', data)
+            .then(function (res) {
+              console.log(res);
+              if (res.data.code === 0) {
+                $('#upload').modal('show');
+              }
+            })
+            .catch(function (error) {
+              console.log(error);
+            });
         },
         getteammate: function () {
           var _this = this;
@@ -114,6 +188,24 @@
             })
             .catch(function (error) {
               console.log(error);
+            });
+        },
+        judge: function () {
+          console.log('judge');
+          var _this = this;
+          axios.post('/judgesubmit', {
+              team1: _this.teamname1,
+              team2: _this.teamname2,
+              score1: _this.score1,
+              score2: _this.score2,
+              court: _this.court
+            })
+            .then(function (res) {
+              alert('上传成功，请关闭页面');
+              window.close();
+            })
+            .catch(function (error) {
+              console.log(error)
             });
         }
       }
