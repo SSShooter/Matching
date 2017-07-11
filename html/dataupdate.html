@@ -125,6 +125,7 @@
     <button style="display: block" type="button" class="btn btn-primary" @click="submit">提交数据</button>
   </div>
 
+  <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
   <script src="https://unpkg.com/vue/dist/vue.js"></script>
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
   <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
@@ -145,6 +146,7 @@
         scoreOption: ''
       },
       mounted: function () {
+        this.socket = io();
         $('#getteamname').modal({
           keyboard: false,
           backdrop: 'static',
@@ -201,6 +203,7 @@
               court: _this.court
             })
             .then(function (res) {
+              _this.socket.emit('matchover', _this.teamname1, _this.teamname2);
               alert('上传成功，请关闭页面');
               window.close();
             })

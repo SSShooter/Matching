@@ -149,6 +149,7 @@
         <span>分數 {{rivalscore}}</span>
       </div>
     </div>
+    <div v-if="courtNumber">比赛场地：{{courtNumber}}号场</div>
     <div v-if="isCourtFull">场地已满请等待,最快结束的比赛结束时间为大概{{waitTime}}</div>
     <div v-else class="matchdiv">
       <!--span使用没有宽度高度-->
@@ -176,20 +177,25 @@
         quickjoinTimer: '',
         socket: '',
         isCourtFull: false,
-        waitTime: ''
+        waitTime: '',
+        courtNumber: ''
       },
       mounted: function () {
         var _this = this;
         this.socket = io();
-        this.socket.on('match successfully', function (rival, score) {
+        this.socket.on('match successfully', function (rival, score, courtnumber) {
           clearTimeout(_this.quickjoinTimer);
           _this.matching = 2;
           _this.rival = rival;
           _this.rivalscore = score;
+          _this.courtNumber = courtnumber;
         });
         this.socket.on('court full', function (waitTime) {
           _this.isCourtFull = true;
           _this.waitTime = waitTime;
+        });
+        this.socket.on('over', function () {
+          console.log('over')
         });
         axios.get('/getinfo')
           .then(function (res) {
@@ -208,7 +214,7 @@
         join: function () {
           this.matching = 0;
           this.socket.emit('join', this.score, this.name);
-          this.quickjoinTimer = setTimeout('homepage.quickjoin()', 1000 * 60);
+          // this.quickjoinTimer = setTimeout('homepage.quickjoin()', 1000 * 60);
         },
         quickjoin: function () {
           this.socket.emit('cancel');
@@ -216,7 +222,7 @@
         },
         cancel: function () {
           this.matching = 1;
-          clearTimeout(this.quickjoinTimer);
+          // clearTimeout(this.quickjoinTimer);
           this.socket.emit('cancel');
         }
       }

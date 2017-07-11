@@ -241,6 +241,12 @@ app.post('/teaminfo', function (req, res) {
       })
       return
     }
+    if (!doc) {
+      res.json({
+        mystatus: req.session.status
+      })
+      return
+    }
     var matestatePromise = [Player.findOne({
       openid: doc.leader
     }).exec()]
@@ -345,7 +351,7 @@ app.post('/uploadlogo', function (req, res) {
 })
 
 // 随机字符串命名
-function randomString (len) {
+function randomString(len) {
   len = len || 4
   var $chars = 'ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678' /** **默认去掉了容易混淆的字符oOLl,9gq,Vv,Uu,I1****/
   var maxPos = $chars.length
@@ -514,7 +520,7 @@ app.get('/getinfo', function (req, res) {
 })
 
 // 天梯胜负得分计算
-function ScoreCalc (team1Name, team2Name, winner, team1Result, team2Result, cb) {
+function ScoreCalc(team1Name, team2Name, winner, team1Result, team2Result, cb) {
   var promise1 = Team.findOne({
     name: team1Name
   }).exec()
@@ -568,13 +574,13 @@ var scoreQue = []
 var lastRival = {}
 
 // 未使用场地
-var unuseCourt = [1, 2, 3, 4]
+var unuseCourt = [1]
 
 // 已使用场地
 var usingCourt = []
 
 // 分配场地
-function distributeCourt () {
+function distributeCourt() {
   var number = unuseCourt.shift()
   usingCourt.push({
     number: number,
@@ -584,7 +590,7 @@ function distributeCourt () {
 }
 
 // 回收场地
-function retrieveCourt (court) {
+function retrieveCourt(court) {
   court = Number(court)
   unuseCourt.push(court)
   var temp = _.pluck(usingCourt, 'number')
@@ -593,7 +599,7 @@ function retrieveCourt (court) {
 }
 
 // 检查是否有空场
-function hasEmptyCourt () {
+function hasEmptyCourt() {
   if (_.isEmpty(unuseCourt)) return false
   else return true
 }
@@ -719,6 +725,7 @@ io.on('connection', function (socket) {
       let Team2 = _.findWhere(io.sockets.sockets, {
         id: que[test]
       })
+      //todo 更改对手来源
       if (lastRival[Team1.Teamname] === Team2.Teamname) { // 与上场比赛是同一对手，所以不能匹配
         console.log('与上场比赛是同一对手，等待其他匹配')
         let key = bs.insert(scoreQue, score)
@@ -776,6 +783,19 @@ io.on('connection', function (socket) {
       que.splice(key, 1)
       console.log(que)
     }
+  })
+
+  // 比赛结束信号
+  socket.on('matchover', function (team1, team2) {
+    console.log(io.sockets.sockets)
+    let Team1 = _.findWhere(io.sockets.sockets, {
+      Teamname: team1
+    })
+    let Team2 = _.findWhere(io.sockets.sockets, {
+      Teamname: team2
+    })
+    Team1.emit('over')
+    Team2.emit('over')
   })
 })
 
