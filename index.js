@@ -7,6 +7,7 @@ var io = require('socket.io')(http)
 var port = process.env.PORT || 80
 var bs = require('binarysearch')
 var Team = require('./models/Team')
+var TeamState = require('./models/TeamState')
 var Player = require('./models/Player')
 var bodyParser = require('body-parser')
 var session = require('express-session')
@@ -18,6 +19,17 @@ var mongoose = require('mongoose')
 mongoose.Promise = global.Promise
 var moment = require('moment')
 moment.locale('zh-cn')
+
+
+Team.findOne({
+    name: 'ce1'
+  })
+  .populate('teamstate')
+  .exec(function (err, doc) {
+    if (!err && !doc) return
+    doc.teamstate.lastrival = 'ssss'
+    doc.teamstate.save()
+  })
 /**
  * get /oauth 微信登陆
  * get /myteam 跳到我的队伍页面
@@ -276,37 +288,43 @@ app.post('/teaminfo', function (req, res) {
 // 新建队伍
 app.post('/newteam', function (req, res) {
   req.body.score = 0 // 初始化分数为0
+  let newTeamState = new TeamState({
+    name: req.body.name
+  })
+  req.body.teamstate = newTeamState._id
   let newTeam = new Team(req.body)
-  newTeam.save(function (err, doc) {
-    if (err) {
-      res.json({
-        code: 1,
-        msg: '数据库错误',
-        err: err
-      })
-    } else {
-      // 队伍创建成功
-      Player.findOne({
-        openid: req.session.openid
-      }, function (err, doc) {
-        if (err) {
-          res.json({
-            code: 1,
-            err: err
-          })
-        }
-        doc.team = req.body.name
-        doc.status = 1
-        req.session.status = 1
-        req.session.team = req.body.name
-        doc.save(function () {
-          res.json({
-            code: 0,
-            msg: doc
+  newTeamState.save(function () {
+    newTeam.save(function (err, doc) {
+      if (err) {
+        res.json({
+          code: 1,
+          msg: '数据库错误',
+          err: err
+        })
+      } else {
+        // 队伍创建成功
+        Player.findOne({
+          openid: req.session.openid
+        }, function (err, doc) {
+          if (err) {
+            res.json({
+              code: 1,
+              err: err
+            })
+          }
+          doc.team = req.body.name
+          doc.status = 1
+          req.session.status = 1
+          req.session.team = req.body.name
+          doc.save(function () {
+            res.json({
+              code: 0,
+              msg: doc
+            })
           })
         })
-      })
-    }
+      }
+    })
   })
 })
 
@@ -506,30 +524,34 @@ app.post('/getpersonaldata', function (req, res) {
 // 队伍情报获取
 app.get('/getinfo', function (req, res) {
   Team.findOne({
-    name: req.session.team
-    // >注意点<
-  }, function (err, doc) {
-    if (err) {
-      res.json({
-        code: 1,
-        err: err
-      })
-    }
-    res.json(doc)
-  })
+      name: req.session.team
+      // >注意点<
+    })
+    .populate('teamstate')
+    .exec(function (err, doc) {
+      if (err) {
+        res.json({
+          code: 1,
+          err: err
+        })
+      }
+      res.json(doc)
+    })
 })
 
 // 天梯胜负得分计算
 function ScoreCalc(team1Name, team2Name, winner, team1Result, team2Result, cb) {
   var promise1 = Team.findOne({
     name: team1Name
-  }).exec()
+  }).populate('teamstate').exec()
   var promise2 = Team.findOne({
     name: team2Name
-  }).exec()
+  }).populate('teamstate').exec()
   Promise.all([promise1, promise2]).then(value => {
-    value[0].state = 0
-    value[1].state = 0
+    value[0].teamstate.state = 0
+    value[1].teamstate.state = 0
+    value[1].teamstate.save()
+    value[0].teamstate.save()
     if (winner !== 0) { // 非平分的情况
       let team1Score = value[0].score
       let team2Score = value[1].score
@@ -564,8 +586,13 @@ function ScoreCalc(team1Name, team2Name, winner, team1Result, team2Result, cb) {
   })
 }
 
-// 队列
+// 队列(放置socket)
 var que = []
+
+// 队列(放置名称)（是否在队列的唯一依据）（重连后socket.id会改变）
+var nameQue = []
+
+var teamname2socket = {}
 
 // 分数队列 于队列相对应，用于按分数匹配
 var scoreQue = []
@@ -604,12 +631,13 @@ function hasEmptyCourt() {
   else return true
 }
 
-io.on('connection', function (socket) {
+var teampage = io.of('/teampage').on('connection', function (socket) {
   // 上线用于队伍页面信息更新推送
   socket.on('playeronline', function (id) {
     socket.openid = id // 在socket缓存队伍名
     console.log(socket.openid)
   })
+
   // 入队推送
   socket.on('someone join', function (teamname) {
     Team.findOne({
@@ -633,6 +661,7 @@ io.on('connection', function (socket) {
       }
     })
   })
+
   // 离队推送
   socket.on('someone leave', function (teamname) {
     Team.findOne({
@@ -656,7 +685,10 @@ io.on('connection', function (socket) {
       }
     })
   })
+})
 
+var match = io.of('/match').on('connection', function (socket) {
+  // 队伍上线(参数: 队名 分数)
   socket.on('online', function (id, score) {
     if (!hasEmptyCourt()) {
       console.log(usingCourt[0].time)
@@ -664,119 +696,98 @@ io.on('connection', function (socket) {
       console.log(fromNow)
       socket.emit('court full', fromNow)
     }
+    //队名2socket对象
+    teamname2socket[id] = socket
     socket.Teamname = id // 在socket缓存队伍名
     socket.Score = score
     console.log(socket.Teamname)
   })
 
-  // 快速匹配请求
-  socket.on('quickjoin', function (score, id) { // 快速加入，所有问题均不检查
-    let test = bs.closest(scoreQue, score)
-    if (test === -1) { // 无人等待匹配
-      console.log('没人，等待匹配')
-      scoreQue[0] = score
-      que[0] = socket.id
-    } else {
-      let Team1 = _.findWhere(io.sockets.sockets, {
-        id: socket.id
-      })
-      let Team2 = _.findWhere(io.sockets.sockets, {
-        id: que[test]
-      })
-      var courtNumber = distributeCourt()
-      console.log('与' + scoreQue[test] + '分玩家匹配')
-      console.log(usingCourt, unuseCourt)
-      scoreQue.splice(test, 1) // 匹配成功，从等待列表删除
-      que.splice(test, 1) // 同下
-      console.log(Team1.Teamname, Team2.Teamname)
-      Team.update({
-        name: Team1.Teamname
-      }, {
-        state: 1,
-        lastrival: Team2.Teamname
-      }).exec()
-      Team.update({
-        name: Team2.Teamname
-      }, {
-        state: 1,
-        lastrival: Team1.Teamname
-      }).exec()
-      lastRival[Team1.Teamname] = Team2.Teamname
-      lastRival[Team2.Teamname] = Team1.Teamname
-      Team1.emit('match successfully', Team2.Teamname, Team2.Score, courtNumber)
-      Team2.emit('match successfully', Team1.Teamname, Team1.Score, courtNumber)
-    }
-    console.log(que)
-    console.log(scoreQue)
-    console.log('\n')
-  })
-
   // 匹配请求
-  socket.on('join', function (score, id) { // 加入匹配存入分数与id
+  socket.on('join', (score, id) => { // 加入匹配存入分数与id
+    let isInQue = _.indexOf(nameQue, id)
+    console.log('isInQue', isInQue)
+    if (isInQue !== -1) {
+      scoreQue[isInQue] = score
+      que[isInQue] = socket
+      nameQue[isInQue] = id
+      console.log('nameQue', nameQue)
+      return
+    }
     let test = bs.closest(scoreQue, score) // 查找最近分数最近的对手，返回数组位置
     if (test === -1) { // 无人等待匹配
-      console.log('没人，等待匹配')
+      console.log('状态', '没人，等待匹配')
       scoreQue[0] = score
-      que[0] = socket.id
+      que[0] = socket
+      nameQue[0] = id
     } else if ((scoreQue[test] - score) < 500) { // 匹配到旗鼓相当的对手
-      let Team1 = _.findWhere(io.sockets.sockets, {
-        id: socket.id
-      })
-      let Team2 = _.findWhere(io.sockets.sockets, {
-        id: que[test]
-      })
+      let Team1 = socket
+      let Team2 = que[test]
       //todo 更改对手来源
       if (lastRival[Team1.Teamname] === Team2.Teamname) { // 与上场比赛是同一对手，所以不能匹配
-        console.log('与上场比赛是同一对手，等待其他匹配')
+        console.log('状态', '与上场比赛是同一对手，等待其他匹配')
         let key = bs.insert(scoreQue, score)
-        que.splice(key, 0, socket.id)
-      } else {
+        que.splice(key, 0, socket)
+      } else { //成功匹配的情况
         var courtNumber = distributeCourt()
-        console.log('与' + scoreQue[test] + '分玩家匹配')
-        console.log(usingCourt, unuseCourt)
+        console.log('状态', '与' + scoreQue[test] + '分玩家匹配')
+        console.log('场地', usingCourt)
         scoreQue.splice(test, 1) // 匹配成功，从等待列表删除
         que.splice(test, 1) // 删除列表中队伍（待确定
-        console.log(Team1.Teamname, Team2.Teamname)
-        Team.update({
-          name: Team1.Teamname
-        }, {
-          state: 1,
-          lastrival: Team2.Teamname
-        }).exec()
-        Team.update({
-          name: Team2.Teamname
-        }, {
-          state: 1,
-          lastrival: Team1.Teamname
-        }).exec()
+        console.log('队伍1：', Team1.Teamname, '队伍2：', Team2.Teamname)
+        TeamState.findOne({
+            name: Team1.Teamname
+          })
+          .exec(function (err, doc) {
+            doc.state = 1
+            doc.lastrival = Team2.Teamname
+            doc.lastrivalscore = Team2.Score
+            doc.courtnumber = courtNumber
+            doc.save()
+          })
+        TeamState.findOne({
+            name: Team2.Teamname
+          })
+          .exec(function (err, doc) {
+            doc.state = 1
+            doc.lastrival = Team1.Teamname
+            doc.lastrivalscore = Team1.Score
+            doc.courtnumber = courtNumber
+            doc.save()
+          })
         lastRival[Team1.Teamname] = Team2.Teamname
         lastRival[Team2.Teamname] = Team1.Teamname
         Team1.emit('match successfully', Team2.Teamname, Team2.Score, courtNumber)
         Team2.emit('match successfully', Team1.Teamname, Team1.Score, courtNumber)
       }
     } else { // 差距太大
-      console.log('无旗鼓相当的对手，等待匹配')
+      console.log('状态', '无旗鼓相当的对手，等待匹配')
       let key = bs.insert(scoreQue, score)
-      que.splice(key, 0, socket.id)
+      que.splice(key, 0, socket)
+      nameQue.splice(key, 0, id)
     }
-    console.log(que)
-    console.log(scoreQue)
+    console.log('nameQue', nameQue)
     console.log('\n')
   })
 
   // 取消匹配请求
   socket.on('cancel', function () {
-    let key = _.indexOf(que, socket.id)
-    console.log(socket.id + '玩家取消匹配')
-    scoreQue.splice(key, 1)
-    que.splice(key, 1)
-    console.log(que)
+    let key = _.indexOf(que, socket)
+    //找不到则不删除（有可能是离线遗留问题）（重新按匹配时覆盖原来的socket）
+    if (key !== -1) {
+      console.log(nameQue[key] + '取消匹配')
+      scoreQue.splice(key, 1)
+      que.splice(key, 1)
+      nameQue.splice(key, 1)
+      console.log('nameQue', nameQue)
+      console.log('\n')
+    }
   })
 
-  // 断线请求
+  // 断线
   socket.on('disconnect', function (reason) {
-    console.log(reason)
-    let key = _.indexOf(que, socket.id)
+    console.log('disconnect', reason)
+    let key = _.indexOf(que, socket)
     if (key !== -1) { // 未匹配用户断线
       console.log(socket.id + '玩家断线')
       scoreQue.splice(key, 1) // 链接断开，从等待列表删除
@@ -785,17 +796,35 @@ io.on('connection', function (socket) {
     }
   })
 
+  // 比赛开始信号
+  socket.on('matchstart', function (t1, t2) {
+    let startTime = +new Date()
+    TeamState.findOne({
+        name: t1
+      })
+      .exec((err, doc) => {
+        doc.starttime = startTime
+        doc.save()
+      })
+    TeamState.findOne({
+        name: t2
+      })
+      .exec((err, doc) => {
+        doc.starttime = startTime
+        doc.save()
+      })
+    if (teamname2socket[t1])
+      teamname2socket[t1].emit('start')
+    if (teamname2socket[t2])
+      teamname2socket[t2].emit('start')
+  })
+
   // 比赛结束信号
-  socket.on('matchover', function (team1, team2) {
-    console.log(io.sockets.sockets)
-    let Team1 = _.findWhere(io.sockets.sockets, {
-      Teamname: team1
-    })
-    let Team2 = _.findWhere(io.sockets.sockets, {
-      Teamname: team2
-    })
-    Team1.emit('over')
-    Team2.emit('over')
+  socket.on('matchover', function (t1, t2) {
+    if (teamname2socket[t1])
+      teamname2socket[t1].emit('over')
+    if (teamname2socket[t2])
+      teamname2socket[t2].emit('over')
   })
 })
 

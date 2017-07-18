@@ -1,4 +1,5 @@
 var mongoose = require('mongoose')
+var Schema = mongoose.Schema
 mongoose.connect('mongodb://localhost/test')
 var teamSchama = mongoose.Schema({
   name: {
@@ -15,7 +16,11 @@ var teamSchama = mongoose.Schema({
   list: [{
     rival: String,
     matchScore: String
-  }]
+  }],
+  teamstate: {
+    type: Schema.Types.ObjectId,
+    ref: "teamState"
+  }
 })
 teamSchama.statics = {
   fetch: function (cb) {

@@ -149,68 +149,140 @@
         <span>分數 {{rivalscore}}</span>
       </div>
     </div>
-    <div v-if="courtNumber">比赛场地：{{courtNumber}}号场</div>
-    <div v-if="isCourtFull">场地已满请等待,最快结束的比赛结束时间为大概{{waitTime}}</div>
+
+    <!--场地满&&比赛状态为未匹配-->
+    <div v-if="isCourtFull&&matching===1">场地已满请等待,最快结束的比赛结束时间为大概{{waitTime}}</div>
+
     <div v-else class="matchdiv">
-      <!--span使用没有宽度高度-->
       <transition-group tag="div" name="fade" mode="out-in" class="test">
+        <!--比赛状态为匹配中-->
         <div key="s0" v-if="matching===0" class="spinner"></div>
+        <!--比赛状态为未匹配-->
         <a href="javascript:;" key="s1" v-if="matching===1" class="join-button weui-btn_primary" @click="join">加入比赛</a>
+        <!--比赛状态为已匹配-->
         <a href="javascript:;" key="s2" v-else-if="matching===0" class="join-button weui-btn_primary" @click="cancel">取消</a>
         <p key="s3" v-else class="msg">匹配成功</p>
       </transition-group>
+    </div>
+    <!--比赛状态为已匹配-->
+    <div v-if="matching === 2">比赛场地：{{courtNumber}}号场</div>
+    <div v-if="matching === 2">
+      <p>{{min}}：{{sec}}</p>
     </div>
   </div>
   <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
   <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
   <script src="https://unpkg.com/vue/dist/vue.js"></script>
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.18.1/moment.min.js"></script>
   <script>
+    /*此页面流程
+    进入页面
+    ↓
+    参加比赛→取消比赛←---------------
+    ↓                               |
+    匹配成功                         |
+    ↓                               |
+    等待裁判宣布比赛开始              |
+    ↓                               |
+    等待裁判宣布比赛结束→查看队伍战绩  |
+    ↓                               | 
+    再次参加比赛---------------------→
+    */
     var homepage = new Vue({
       el: '#main',
       data: {
-        name: '',
-        score: 0, //这是天梯分
-        matching: 1, //0匹配中1未匹配2匹配成功
-        rival: '未匹配',
-        rivalscore: '未匹配',
-        quickjoinTimer: '',
+        name: '',//自己队名
+        score: 0, //自己天梯分
+        rival: '未匹配',//对手队名
+        rivalscore: '未匹配',//对手天梯分
+        // quickjoinTimer: '',
         socket: '',
-        isCourtFull: false,
-        waitTime: '',
-        courtNumber: ''
+        isCourtFull: false,//场地是否已满
+        waitTime: '',//场地已满时等待时间
+        courtNumber: '',//场地编号
+        starttime: '',//比赛开始时间（用于倒数计算）
+        sec: '',//倒数秒
+        min: '',//倒数分
+        matching: 1, //0匹配中1未匹配2匹配成功
       },
       mounted: function () {
         var _this = this;
-        this.socket = io();
+        //链接到namespace为match
+        this.socket = io('/match');
+        //接收到匹配成功通知时
         this.socket.on('match successfully', function (rival, score, courtnumber) {
-          clearTimeout(_this.quickjoinTimer);
+          // clearTimeout(_this.quickjoinTimer);
           _this.matching = 2;
           _this.rival = rival;
           _this.rivalscore = score;
           _this.courtNumber = courtnumber;
         });
+        //接收到场地已满通知时
         this.socket.on('court full', function (waitTime) {
           _this.isCourtFull = true;
           _this.waitTime = waitTime;
         });
+        //短线时（包括本地断线）
+        this.socket.on('disconnect', function (waitTime) {
+          alert('断线')
+        });
+        //重连成功时
+        this.socket.on('reconnect',function(){
+          alert('重连成功')
+          getInfo()
+        })
+        //接收到比赛开始通知时
+        this.socket.on('start', function () {
+          console.log('start')
+          _this.countdownStart()
+        });
+        //接收到比赛结束通知时
         this.socket.on('over', function () {
           console.log('over')
+          //弹出modal 选择继续比赛或跳转到队伍页面
         });
-        axios.get('/getinfo')
+        this.getInfo()//刷新页面信息
+      },
+      methods: {
+        getInfo:function(){
+          var _this = this;
+          axios.get('/getinfo')
           .then(function (res) {
             _this.socket.emit('online', res.data.name, res.data.score); //上线（用于匹配完断线重新获取name信息）
             console.log(res);
             _this.name = res.data.name;
             _this.score = res.data.score;
-            if (res.data.state === 1) {
-              _this.rival = res.data.lastrival;
-              _this.matching = 2;
+            if (res.data.teamstate.state === 1) {
+              _this.rival = res.data.teamstate.lastrival;
+              _this.rivalscore = res.data.teamstate.lastrivalscore;
+              _this.courtNumber = res.data.teamstate.courtnumber;
+              _this.starttime = res.data.teamstate.starttime;
               _this.submitDisabled = false;
+              _this.matching = 2;
+              _this.countdownStart();
             }
           });
-      },
-      methods: {
+        },
+        countdownStart: function () {
+          var start = this.starttime ||  +new Date()
+          var now = +new Date()
+          var cd = start - now + 10 * 60 * 1000
+          console.log(start, now, cd)
+          if (cd < 0) {
+            this.min = 0
+            this.sec = 0
+            return
+          }
+          countdownfunction = setInterval(function cdfunction() {
+            homepage.min = Math.floor(cd / (60 * 1000))
+            homepage.sec = Math.floor(cd % (60 * 1000) / 1000)
+            cd = cd - 1000
+            if (cd < 0) {
+              clearInterval(countdownfunction)
+            }
+          }, 1000)
+        },
         join: function () {
           this.matching = 0;
           this.socket.emit('join', this.score, this.name);
