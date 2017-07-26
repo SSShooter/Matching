@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>比赛结果</title>
+  <style>
+    #container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .personal-score {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 80vw;
+    }
+
+    .team1 {
+      text-align: left;
+    }
+
+    .team2 {
+      text-align: right;
+    }
+
+    [v-cloak] {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="container" v-cloak>
+    <div class="team">
+      {{team2.rival}} VS {{team1.rival}}
+    </div>
+    <div class="score">
+      {{team1.matchScore}}
+    </div>
+    <div class="personal-score" v-cloak>
+      <div class="team1">
+        <div v-for="mate in mate1">
+          <div>{{mate.name}}</div>
+          <div>个人得分：{{mate.matchdata[mate.matchdata.length-1][5]}}</div>
+        </div>
+      </div>
+      <div class="team2">
+        <div v-for="mate in mate2">
+          <div>{{mate.name}}</div>
+          <div>个人得分：{{mate.matchdata[mate.matchdata.length-1][5]}}</div>
+        </div>
+      </div>
+    </div>
+    <div class="btn-set">
+      <button onclick="location.replace('/oauth/wx_login_to_match')">开始下场比赛</button>
+      <button onclick="location.replace('/oauth/wx_login')">回到队伍页面</button>
+    </div>
+  </div>
+  <script src="https://unpkg.com/vue/dist/vue.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script>
+    var vm = new Vue({
+      el: '#container',
+      data: {
+        mate1: [],
+        mate2: [],
+        team1: {},
+        team2: {}
+      },
+      mounted: function () {
+        var _this = this
+        axios.post('/getresults', {
+            team1: sessionStorage.team1,
+            team2: sessionStorage.team2
+          })
+          .then(function (res) {
+            console.log(res)
+            _this.mate1 = res.data.mate1
+            _this.mate2 = res.data.mate2
+            _this.team1 = res.data.team1
+            _this.team2 = res.data.team2
+          })
+          .catch(function (err) {
+            console.log(err);
+          });
+      }
+    })
+  </script>
+</body>
+
+</html>

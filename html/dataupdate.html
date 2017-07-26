@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>Document</title>
+  <title>后台管理</title>
   <link rel="stylesheet" href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
     crossorigin="anonymous">
   <style>
@@ -143,11 +143,11 @@
         players: [],
         playerOption: '',
         itemOption: '',
-        scoreOption: ''
+        scoreOption: '',
+        data: {} //表单数据
       },
       mounted: function () {
         this.socket = io('/match');
-        this.socket.emit('matchstart','111', '222');
         $('#getteamname').modal({
           keyboard: false,
           backdrop: 'static',
@@ -165,27 +165,15 @@
           document.querySelector('input[name="' + this.playerOption + this.itemOption + '"]').value = Number(temp) +
             Number(this.scoreOption);
         },
-        submit: function () {
-          var data = $('form').serialize(); //要有效一定要在input写上name属性
-          console.log(data);
-          axios.post('/personaldata', data)
-            .then(function (res) {
-              console.log(res);
-              if (res.data.code === 0) {
-                $('#upload').modal('show');
-              }
-            })
-            .catch(function (error) {
-              console.log(error);
-            });
-        },
         getteammate: function () {
           var _this = this;
+          this.socket.emit('matchstart', this.teamname1, this.teamname2);
           axios.post('/getPlayer', {
               team1: _this.teamname1,
               team2: _this.teamname2
             })
             .then(function (res) {
+              console.log('this',this)
               _this.players = res.data.mate;
               $('#getteamname').modal('toggle');
             })
@@ -210,6 +198,35 @@
             })
             .catch(function (error) {
               console.log(error)
+            });
+          var data2 = {}
+          data2.personal = this.data
+          data2.team1 = this.teamname1
+          data2.team2 = this.teamname2
+          data2.score1 = this.score1
+          data2.score2 = this.score2
+          axios.post('/matchdetails', data2)
+            .then(function (res) {
+              console.log(res)
+            })
+            .catch(function (err) {
+
+            })
+        },
+        submit: function () {
+          for (var i = 0; i < $('form')[0].length; i++) {
+            this.data[$('form')[0][i].name] = $('form')[0][i].value
+          }
+          console.log(this.data);
+          axios.post('/personaldata', this.data)
+            .then(function (res) {
+              console.log(res);
+              if (res.data.code === 0) {
+                $('#upload').modal('show');
+              }
+            })
+            .catch(function (error) {
+              console.log(error);
             });
         }
       }

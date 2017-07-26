@@ -9,6 +9,7 @@ var bs = require('binarysearch')
 var Team = require('./models/Team')
 var TeamState = require('./models/TeamState')
 var Player = require('./models/Player')
+var Match = require('./models/Match')
 var bodyParser = require('body-parser')
 var session = require('express-session')
 var oauth = require('./routes/oauth')
@@ -19,17 +20,14 @@ var mongoose = require('mongoose')
 mongoose.Promise = global.Promise
 var moment = require('moment')
 moment.locale('zh-cn')
+import {
+  push
+} from './routes/function.js'
+// push(['otUibwDjOGCQLfEIrKGk43uDWKSo', 'otUibwN_3e3yG3WMsHvNyH3X2jbo'])
+//TODO 比赛详情populate
+//TODO 推送比赛结束
+//TODO 收费
 
-
-Team.findOne({
-    name: 'ce1'
-  })
-  .populate('teamstate')
-  .exec(function (err, doc) {
-    if (!err && !doc) return
-    doc.teamstate.lastrival = 'ssss'
-    doc.teamstate.save()
-  })
 /**
  * get /oauth 微信登陆
  * get /myteam 跳到我的队伍页面
@@ -50,6 +48,62 @@ app.use(session({
 app.use('/oauth', oauth)
 
 app.use('/', htmlrouter)
+
+// 队伍情报获取
+app.get('/getinfo', function (req, res) {
+  Team.findOne({
+      name: req.session.team
+      // >注意点<
+    })
+    .populate('teamstate')
+    .exec(function (err, doc) {
+      if (err) {
+        res.json({
+          code: 1,
+          err: err
+        })
+      }
+      res.json(doc)
+    })
+})
+
+// 获取双方比赛结果
+app.post('/getresults', function (req, res) {
+  var t1 = req.body.team1
+  var t2 = req.body.team2
+  var p1 = Team.findOne({
+    name: t1
+  }).exec()
+  var p2 = Team.findOne({
+    name: t2
+  }).exec()
+  Promise.all([p1, p2]).then(value => {
+    var mate1 = [value[0].leader]
+    mate1 = mate1.concat(value[0].mate)
+    var mate2 = [value[1].leader]
+    mate2 = mate2.concat(value[1].mate)
+    var mateP1 = mate1.map(function (val) {
+      return Player.findOne({
+        openid: val
+      }).exec()
+    })
+    var mateP2 = mate2.map(function (val) {
+      return Player.findOne({
+        openid: val
+      }).exec()
+    })
+    var promiseAll1 = Promise.all(mateP1)
+    var promiseAll2 = Promise.all(mateP2)
+    Promise.all([promiseAll1, promiseAll2]).then(function (val) {
+      res.json({
+        mate1: val[0],
+        mate2: val[1],
+        team1: _.last(value[0].list),
+        team2: _.last(value[1].list)
+      })
+    })
+  })
+})
 
 // 裁判获取两队成员
 app.post('/getplayer', function (req, res) {
@@ -83,7 +137,6 @@ app.post('/getplayer', function (req, res) {
 
 // 裁判记录球员数据
 app.post('/personaldata', function (req, res) {
-  console.log(req.body)
   var promises = []
   for (let i = 0; i < 10; i++) {
     if (!req.body[i + 'openid']) break
@@ -133,6 +186,12 @@ app.post('/judgesubmit', function (req, res) {
       msg: 'ok'
     })
   })
+})
+
+// 裁判上传成绩
+app.post('/matchdetails', function (req, res) {
+  let newmatch = new Match(req.body)
+  newmatch.save()
 })
 
 // 登陆检验
@@ -521,23 +580,7 @@ app.post('/getpersonaldata', function (req, res) {
   })
 })
 
-// 队伍情报获取
-app.get('/getinfo', function (req, res) {
-  Team.findOne({
-      name: req.session.team
-      // >注意点<
-    })
-    .populate('teamstate')
-    .exec(function (err, doc) {
-      if (err) {
-        res.json({
-          code: 1,
-          err: err
-        })
-      }
-      res.json(doc)
-    })
-})
+
 
 // 天梯胜负得分计算
 function ScoreCalc(team1Name, team2Name, winner, team1Result, team2Result, cb) {
@@ -597,11 +640,13 @@ var teamname2socket = {}
 // 分数队列 于队列相对应，用于按分数匹配
 var scoreQue = []
 
+var notifyQue = []
+
 // 记录各队伍上一个对手
 var lastRival = {}
 
 // 未使用场地
-var unuseCourt = [1]
+var unuseCourt = []
 
 // 已使用场地
 var usingCourt = []
@@ -695,6 +740,7 @@ var match = io.of('/match').on('connection', function (socket) {
       var fromNow = moment(usingCourt[0].time).add(13, 'm').fromNow()
       console.log(fromNow)
       socket.emit('court full', fromNow)
+      notifyQue.push(id)
     }
     //队名2socket对象
     teamname2socket[id] = socket
@@ -803,15 +849,19 @@ var match = io.of('/match').on('connection', function (socket) {
         name: t1
       })
       .exec((err, doc) => {
-        doc.starttime = startTime
-        doc.save()
+        if (doc) {
+          doc.starttime = startTime
+          doc.save()
+        }
       })
     TeamState.findOne({
         name: t2
       })
       .exec((err, doc) => {
-        doc.starttime = startTime
-        doc.save()
+        if (doc) {
+          doc.starttime = startTime
+          doc.save()
+        }
       })
     if (teamname2socket[t1])
       teamname2socket[t1].emit('start')
@@ -825,6 +875,8 @@ var match = io.of('/match').on('connection', function (socket) {
       teamname2socket[t1].emit('over')
     if (teamname2socket[t2])
       teamname2socket[t2].emit('over')
+    push(notifyQue)
+    notifyQue = []
   })
 })
 

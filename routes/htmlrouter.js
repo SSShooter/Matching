@@ -45,4 +45,8 @@ router.get('/getpersonaldata', function (req, res) {
 router.get('/getteamdata', function (req, res) {
   res.sendFile(dirname + '/html/getteamdata.html')
 })
+
+router.get('/matchresult', function (req, res) {
+  res.sendFile(dirname + '/html/matchresult.html')
+})
 module.exports = router

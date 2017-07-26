@@ -192,18 +192,18 @@
     var homepage = new Vue({
       el: '#main',
       data: {
-        name: '',//自己队名
+        name: '', //自己队名
         score: 0, //自己天梯分
-        rival: '未匹配',//对手队名
-        rivalscore: '未匹配',//对手天梯分
+        rival: '未匹配', //对手队名
+        rivalscore: '未匹配', //对手天梯分
         // quickjoinTimer: '',
         socket: '',
-        isCourtFull: false,//场地是否已满
-        waitTime: '',//场地已满时等待时间
-        courtNumber: '',//场地编号
-        starttime: '',//比赛开始时间（用于倒数计算）
-        sec: '',//倒数秒
-        min: '',//倒数分
+        isCourtFull: false, //场地是否已满
+        waitTime: '', //场地已满时等待时间
+        courtNumber: '', //场地编号
+        starttime: '', //比赛开始时间（用于倒数计算）
+        sec: '', //倒数秒
+        min: '', //倒数分
         matching: 1, //0匹配中1未匹配2匹配成功
       },
       mounted: function () {
@@ -228,9 +228,9 @@
           alert('断线')
         });
         //重连成功时
-        this.socket.on('reconnect',function(){
+        this.socket.on('reconnect', function () {
           alert('重连成功')
-          getInfo()
+          _this.getInfo()
         })
         //接收到比赛开始通知时
         this.socket.on('start', function () {
@@ -240,32 +240,42 @@
         //接收到比赛结束通知时
         this.socket.on('over', function () {
           console.log('over')
+          console.log(_this.name,_this.rival)
+          location.replace('/matchresult')
           //弹出modal 选择继续比赛或跳转到队伍页面
         });
-        this.getInfo()//刷新页面信息
+        this.getInfo() //刷新页面信息
+      },
+      watch:{
+        name:function(){
+          sessionStorage.team1 = this.name
+        },
+        rival:function(){
+          sessionStorage.team2 = this.rival
+        }
       },
       methods: {
-        getInfo:function(){
+        getInfo: function () {
           var _this = this;
           axios.get('/getinfo')
-          .then(function (res) {
-            _this.socket.emit('online', res.data.name, res.data.score); //上线（用于匹配完断线重新获取name信息）
-            console.log(res);
-            _this.name = res.data.name;
-            _this.score = res.data.score;
-            if (res.data.teamstate.state === 1) {
-              _this.rival = res.data.teamstate.lastrival;
-              _this.rivalscore = res.data.teamstate.lastrivalscore;
-              _this.courtNumber = res.data.teamstate.courtnumber;
-              _this.starttime = res.data.teamstate.starttime;
-              _this.submitDisabled = false;
-              _this.matching = 2;
-              _this.countdownStart();
-            }
-          });
+            .then(function (res) {
+              _this.socket.emit('online', res.data.name, res.data.score); //上线（用于匹配完断线重新获取name信息）
+              console.log(res);
+              _this.name = res.data.name;
+              _this.score = res.data.score;
+              if (res.data.teamstate.state === 1) {
+                _this.rival = res.data.teamstate.lastrival;
+                _this.rivalscore = res.data.teamstate.lastrivalscore;
+                _this.courtNumber = res.data.teamstate.courtnumber;
+                _this.starttime = res.data.teamstate.starttime;
+                _this.submitDisabled = false;
+                _this.matching = 2;
+                _this.countdownStart();
+              }
+            });
         },
         countdownStart: function () {
-          var start = this.starttime ||  +new Date()
+          var start = this.starttime || +new Date()
           var now = +new Date()
           var cd = start - now + 10 * 60 * 1000
           console.log(start, now, cd)
